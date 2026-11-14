@@ -232,6 +232,72 @@ Map<String, ActivityRecord> activityGroups(ActivityBatch batch) => {
   for (final record in batch.records.reversed) record.key: record,
 };
 
+class ActivityTrend {
+  const ActivityTrend({
+    required this.days,
+    required this.recordCount,
+    required this.latestSet,
+  });
+
+  final List<DailyResult> days;
+  final int recordCount;
+  final DraftSet latestSet;
+}
+
+Map<String, ActivityTrend> activityTrends(ActivityBatch batch) {
+  final recordsByGroup = <String, List<ActivityRecord>>{};
+  for (final record in batch.records) {
+    recordsByGroup.putIfAbsent(record.key, () => []).add(record);
+  }
+
+  final trends = <String, ActivityTrend>{};
+  for (final key in activityGroups(batch).keys) {
+    final records = recordsByGroup[key]!;
+    final setsByDay = <CalendarDay, List<DraftSet>>{};
+    for (final record in records) {
+      setsByDay.putIfAbsent(record.day, () => []).addAll(record.sets);
+    }
+    final dates = setsByDay.keys.toList()..sort();
+    final days = [
+      for (final day in dates)
+        (() {
+          final sets = setsByDay[day]!;
+          var best = 0, total = 0, totalReps = 0;
+          int? bestReps;
+          for (final set in sets) {
+            final value = set.reps == 0 ? 0 : set.value;
+            if (value >= best) {
+              best = value;
+              bestReps = set.reps;
+            }
+            total += set.value;
+            totalReps += set.reps ?? 0;
+          }
+          return (
+            day: day,
+            first: sets.first.value,
+            latest: sets.last.value,
+            best: best,
+            total: total,
+            count: sets.length,
+            latestReps: sets.last.reps,
+            bestReps: bestReps,
+            totalReps: sets.first.reps == null ? null : totalReps,
+          );
+        })(),
+    ];
+    final latestDateRecords = records.where(
+      (record) => record.day == dates.last,
+    );
+    trends[key] = ActivityTrend(
+      days: List.unmodifiable(days),
+      recordCount: records.length,
+      latestSet: latestDateRecords.last.sets.last,
+    );
+  }
+  return Map.unmodifiable(trends);
+}
+
 Map<String, ExerciseMapping> suggestMappings(
   ActivityBatch batch,
   Iterable<Exercise> catalog,
@@ -294,7 +360,9 @@ ActivityPlan planActivity(
           measurement: record.measurement,
         ));
       case null:
-        throw TrackerException('Choose a mapping for "${record.name}".');
+        throw TrackerException(
+          'Choose where to save results for "${record.name}".',
+        );
     }
   }
   final existing = {

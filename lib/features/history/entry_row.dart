@@ -58,6 +58,79 @@ class _EntryRowState extends ConsumerState<EntryRow> {
     }
   }
 
+  Future<void> _showDetails() async {
+    final entry = widget.entry, exercise = widget.exercise;
+    final style = ref.read(durationProvider);
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: BoxConstraints(
+        maxWidth: 540,
+        maxHeight: MediaQuery.sizeOf(context).height * .82,
+      ),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(exercise.name, style: context.type.titleLarge),
+                  ),
+                  IconButton(
+                    tooltip: 'Close activity details',
+                    onPressed: () => Navigator.pop(sheetContext),
+                    icon: const Icon(LucideIcons.x),
+                  ),
+                ],
+              ),
+              Text(fullDay(entry.day), style: context.type.bodyMedium),
+              const SizedBox(height: Space.xs),
+              Text(exercise.measurement.label, style: context.type.bodySmall),
+              const SizedBox(height: Space.md),
+              const SectionTitle('Recorded sets'),
+              for (final set in entry.sets)
+                RowLink(
+                  title: 'Set ${set.position + 1}',
+                  detail: measure(
+                    set.value,
+                    exercise.measurement,
+                    style,
+                    reps: set.reps,
+                  ),
+                  separator: true,
+                  showChevron: false,
+                ),
+              if (entry.notes case final note?) ...[
+                const SizedBox(height: Space.sm),
+                const SectionTitle('Note'),
+                Text(note, style: context.type.bodyMedium),
+              ],
+              const SizedBox(height: Space.md),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(sheetContext);
+                    _action('edit');
+                  },
+                  icon: const Icon(LucideIcons.pencil),
+                  label: const Text('Edit entry'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final style = ref.watch(durationProvider);
@@ -73,19 +146,27 @@ class _EntryRowState extends ConsumerState<EntryRow> {
           .take(4)
           .map((s) => measure(s.value, m, style, reps: s.reps))
           .join(' · ');
-      return RowLink(
-        title: exercise.name,
-        leading: ExerciseIcon(exercise.name),
-        subtitle: widget.showDate
-            ? '${shortDay(entry.day)}${summary == null ? '' : ' · $summary'}'
-            : summary,
-        detail: '$show${entry.sets.length > 4 ? ' …' : ''}',
-        detailStyle: context.type.labelLarge,
-        showChevron: false,
-        onTap: () => context.push(
-          '/log',
-          extra: LogRequest(exercise: exercise, entry: entry),
-        ),
+      return Row(
+        children: [
+          Expanded(
+            child: RowLink(
+              title: exercise.name,
+              leading: ExerciseIcon(exercise.name),
+              subtitle: widget.showDate
+                  ? '${shortDay(entry.day)}${summary == null ? '' : ' · $summary'}'
+                  : summary,
+              detail: '$show${entry.sets.length > 4 ? ' …' : ''}',
+              detailStyle: context.type.labelLarge,
+              showChevron: false,
+              onTap: _showDetails,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Edit entry',
+            onPressed: () => _action('edit'),
+            icon: const Icon(LucideIcons.pencil, size: 18),
+          ),
+        ],
       );
     }
     return Column(

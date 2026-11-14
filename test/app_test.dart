@@ -6,6 +6,10 @@ import 'package:fitness_tracker/core/database/database.dart'
     show TrackerDatabase;
 import 'package:fitness_tracker/core/database/tracker_repository.dart';
 import 'package:fitness_tracker/core/platform/device_services.dart';
+import 'package:fitness_tracker/features/data_transfer/transfer_codec.dart'
+    show activityExample;
+import 'package:fitness_tracker/features/progress/performance_chart.dart'
+    show PerformanceChart, Sparkline;
 import 'package:fitness_tracker/main.dart';
 import 'package:fitness_tracker/features/profile/profile_page.dart';
 import 'package:fitness_tracker/shared/domain/body_metrics.dart';
@@ -133,8 +137,9 @@ void main() {
       try {
         await _pumpApp(tester, repo);
         expect(
-          Theme.of(tester.element(visibleText('Start with one result.')))
-              .scaffoldBackgroundColor,
+          Theme.of(
+            tester.element(visibleText('Start with one result.')),
+          ).scaffoldBackgroundColor,
           background,
         );
         await tester.tap(find.byTooltip('Add entry'));
@@ -703,6 +708,75 @@ void main() {
   });
 
   testWidgets(
+    'AI chat import shows trend previews across all imported entries',
+    (tester) async {
+      final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
+      try {
+        await _pumpApp(tester, repo);
+        await tester.tap(find.byTooltip('Profile'));
+        await tester.pumpAndSettle();
+        await tapText(tester, 'Your data');
+        await tapText(tester, 'Import from AI chat');
+        await tester.enterText(
+          find.byType(TextField).first,
+          activityExample(CalendarDay.fromDate(fixedNow)),
+        );
+        await tapText(tester, 'Validate and preview');
+
+        expect(find.text('First 3 entries'), findsNothing);
+        expect(find.byType(Sparkline), findsNWidgets(4));
+        expect(find.text('Latest 18 reps'), findsOneWidget);
+        expect(find.text('Latest 1 minute, 30 seconds'), findsOneWidget);
+        expect(find.text('Latest 60 kg × 8 reps'), findsOneWidget);
+        await tester.tap(find.byType(Sparkline).first);
+        await tester.pumpAndSettle();
+        expect(find.text('Push-ups').hitTestable(), findsOneWidget);
+        expect(find.byType(PerformanceChart), findsOneWidget);
+        expect(find.text('View all values'), findsOneWidget);
+        expect(find.text('Save imported results to'), findsOneWidget);
+        expect(find.text('Choose destination'), findsOneWidget);
+        expect(find.text('Exercise mapping'), findsNothing);
+        expect(find.text('Preview graph'), findsNothing);
+        expect(find.text('Change mapping'), findsNothing);
+        final selectedPreview = tester.widget<Material>(
+          find.byKey(const ValueKey('activity-preview-push-ups')),
+        );
+        expect(
+          (selectedPreview.shape! as RoundedRectangleBorder).side.width,
+          1.5,
+        );
+        expect(
+          tester.getSize(find.byType(PerformanceChart)).height,
+          greaterThan(200),
+        );
+        await tapText(tester, 'Save imported results to');
+        expect(find.text('Choose destination'), findsOneWidget);
+        expect(
+          find.text('Results from "Push-ups" · Repetitions'),
+          findsOneWidget,
+        );
+        expect(find.text('Create a new exercise'), findsOneWidget);
+        expect(
+          find.text('"Push-ups" will be added when you confirm import.'),
+          findsOneWidget,
+        );
+        expect(
+          tester.getSize(find.byType(ListView).last).height,
+          greaterThan(200),
+        );
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.text('Confirm import'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      } finally {
+        await clean(tester, repo);
+      }
+    },
+  );
+
+  testWidgets(
     'iOS edge swipe returns from Profile and only the tab pill slides',
     (tester) async {
       final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
@@ -784,6 +858,80 @@ void main() {
       }
     },
   );
+
+  testWidgets('single exercise picker has a useful responsive height', (
+    tester,
+  ) async {
+    final repo = TrackerRepository(
+      TrackerDatabase(NativeDatabase.memory()),
+      now: () => fixedNow,
+    );
+    try {
+      final exercise = await repo.createExercise(
+        'Push-ups',
+        Measurement.repetitions,
+      );
+      await repo.log([
+        EntryDraft(
+          exerciseId: exercise.id,
+          day: CalendarDay.fromDate(fixedNow),
+          sets: [(id: null, value: 12, reps: null)],
+        ),
+      ]);
+      await _pumpApp(tester, repo);
+      await tapText(tester, 'Progress');
+      await tapText(tester, 'Push-ups');
+      final picker = find.byType(ListView).last;
+      expect(tester.getSize(picker).height, greaterThan(200));
+      expect(tester.getSize(picker).height, lessThan(874 * .78));
+      expect(visibleText('Repetitions'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    } finally {
+      await clean(tester, repo);
+    }
+  });
+
+  testWidgets('overview recent activity opens all sets read-only', (
+    tester,
+  ) async {
+    final repo = TrackerRepository(
+      TrackerDatabase(NativeDatabase.memory()),
+      now: () => fixedNow,
+    );
+    try {
+      final exercise = await repo.createExercise(
+        'Push-ups',
+        Measurement.repetitions,
+      );
+      await repo.log([
+        EntryDraft(
+          exerciseId: exercise.id,
+          day: CalendarDay.fromDate(fixedNow),
+          sets: [
+            for (var value = 10; value <= 50; value += 10)
+              (id: null, value: value, reps: null),
+          ],
+        ),
+      ]);
+      await _pumpApp(tester, repo);
+      await tester.tap(find.text('10 reps · 20 reps · 30 reps · 40 reps …'));
+      await tester.pumpAndSettle();
+      expect(visibleText('Push-ups'), findsOneWidget);
+      expect(find.textContaining('2026'), findsOneWidget);
+      expect(visibleText('Repetitions'), findsOneWidget);
+      expect(visibleText('Set 1'), findsOneWidget);
+      expect(visibleText('Edit entry'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        visibleText('Set 5'),
+        250,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(visibleText('Set 5'), findsOneWidget);
+      expect(visibleText('50 reps'), findsOneWidget);
+    } finally {
+      await clean(tester, repo);
+    }
+  });
 
   testWidgets(
     'Profile and weight entry fit a compact Android viewport with large text',

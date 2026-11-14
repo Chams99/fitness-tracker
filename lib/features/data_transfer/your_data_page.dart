@@ -75,15 +75,22 @@ class _YourDataPageState extends ConsumerState<YourDataPage> {
       announce(context, 'No recovery backups on this device.');
       return;
     }
-    final file = await chooseOption<String>(context, 'Recovery backups', [
-      for (final name in files)
-        (
-          value: name,
-          label:
-              'Before restore · ${name.length >= 25 ? name.substring(15, 25) : name}',
-          subtitle: name,
-        ),
-    ]);
+    final file = await chooseOption<String>(
+      context,
+      'Recovery backups',
+      [
+        for (final name in files)
+          (
+            value: name,
+            label:
+                'Before restore · ${name.length >= 25 ? name.substring(15, 25) : name}',
+            subtitle: name,
+          ),
+      ],
+      footerText: files.length == 1
+          ? 'Only one recovery backup is available on this device.'
+          : null,
+    );
     if (mounted && file != null) context.push('/transfer/backup', extra: file);
   }, fallback: 'Couldn’t read recovery backups.');
 

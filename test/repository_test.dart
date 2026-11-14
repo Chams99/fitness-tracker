@@ -130,6 +130,63 @@ void main() {
   );
 
   test(
+    'performance retains reps for the plotted latest and best weight',
+    () async {
+      final bench = await repo.createExercise(
+        'Bench press',
+        Measurement.weightAndReps,
+      );
+      final day1 = CalendarDay.parse('2026-11-10');
+      final day2 = CalendarDay.parse('2026-11-12');
+      await repo.log([
+        EntryDraft(
+          exerciseId: bench.id,
+          day: day1,
+          sets: [
+            (id: null, value: 65000, reps: 6),
+            (id: null, value: 65000, reps: 11),
+            (id: null, value: 60000, reps: 8),
+          ],
+        ),
+        EntryDraft(
+          exerciseId: bench.id,
+          day: day2,
+          sets: [
+            (id: null, value: 65000, reps: 8),
+            (id: null, value: 60000, reps: 10),
+          ],
+        ),
+      ]);
+
+      final performance = await repo.watchPerformance(bench.id, all).first;
+      expect(performance.days, [
+        (
+          day: day1,
+          first: 65000,
+          latest: 60000,
+          best: 65000,
+          total: 190000,
+          count: 3,
+          latestReps: 8,
+          bestReps: 11,
+          totalReps: 25,
+        ),
+        (
+          day: day2,
+          first: 65000,
+          latest: 60000,
+          best: 65000,
+          total: 125000,
+          count: 2,
+          latestReps: 10,
+          bestReps: 8,
+          totalReps: 18,
+        ),
+      ]);
+    },
+  );
+
+  test(
     'empty production schema, unique names, archive and restore, locked units',
     () async {
       await repo.open();

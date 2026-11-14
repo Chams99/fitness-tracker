@@ -727,7 +727,12 @@ class TrackerRepository {
         ) AS asc_rank,
         ROW_NUMBER() OVER (
           PARTITION BY e.exercise_id, e.activity_date ORDER BY e.entry_order DESC, s.position DESC
-        ) AS desc_rank
+        ) AS desc_rank,
+        ROW_NUMBER() OVER (
+          PARTITION BY e.exercise_id, e.activity_date
+          ORDER BY CASE WHEN s.reps = 0 THEN 0 ELSE s.value END DESC,
+            e.entry_order DESC, s.position DESC
+        ) AS best_rank
       FROM entries e JOIN exercise_sets s ON s.entry_id=e.id
       WHERE
     ''';
@@ -735,8 +740,10 @@ class TrackerRepository {
     SELECT exercise_id, activity_date,
       MAX(CASE WHEN asc_rank=1 THEN value END) AS first_set,
       MAX(CASE WHEN desc_rank=1 THEN value END) AS latest_set,
-      MAX(CASE WHEN reps = 0 THEN 0 ELSE value END) AS best_set,
-      SUM(value) AS volume, COUNT(*) AS set_count
+      MAX(CASE WHEN best_rank=1 THEN CASE WHEN reps = 0 THEN 0 ELSE value END END) AS best_set,
+      MAX(CASE WHEN desc_rank=1 THEN reps END) AS latest_reps,
+      MAX(CASE WHEN best_rank=1 THEN reps END) AS best_reps,
+      SUM(value) AS volume, COUNT(*) AS set_count, SUM(reps) AS total_reps
     FROM ranked GROUP BY exercise_id, activity_date
     ''';
 
@@ -747,6 +754,9 @@ class TrackerRepository {
     best: r.read<int>('best_set'),
     total: r.read<int>('volume'),
     count: r.read<int>('set_count'),
+    latestReps: r.readNullable<int>('latest_reps'),
+    bestReps: r.readNullable<int>('best_reps'),
+    totalReps: r.readNullable<int>('total_reps'),
   );
 
   Stream<Performance> watchPerformance(String id, DayRange range) => db

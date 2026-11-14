@@ -37,6 +37,15 @@ class _ProgressPageState extends ConsumerState<ProgressPage> {
       ],
       selected: current,
       leading: (_, name) => ExerciseIcon(name),
+      footerText: list.length == 1
+          ? 'This is your only exercise with recorded results.'
+          : null,
+      footerActionLabel: list.length == 1 ? 'Log another exercise' : null,
+      onFooterAction: list.length == 1
+          ? () => WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) showLogSheet(context);
+            })
+          : null,
     );
     if (!mounted || id == null) return;
     if (id != current) ref.read(actionsProvider).select();

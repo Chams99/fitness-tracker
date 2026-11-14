@@ -71,6 +71,61 @@ void main() {
     );
   });
 
+  test('AI import trends include every entry and preserve weighted reps', () {
+    final firstDay = CalendarDay.parse('2026-11-10');
+    final lastDay = CalendarDay.parse('2026-11-12');
+    final batch = ActivityBatch([
+      ActivityRecord(lastDay, 'Push-ups', Measurement.repetitions, [
+        (id: null, value: 18, reps: null),
+      ], null),
+      ActivityRecord(firstDay, 'Bench press', Measurement.weightAndReps, [
+        (id: null, value: 60000, reps: 8),
+        (id: null, value: 65000, reps: 6),
+      ], null),
+      ActivityRecord(firstDay, 'Push-ups', Measurement.repetitions, [
+        (id: null, value: 10, reps: null),
+        (id: null, value: 12, reps: null),
+      ], null),
+      ActivityRecord(lastDay, 'Push-ups', Measurement.repetitions, [
+        (id: null, value: 14, reps: null),
+      ], null),
+    ]);
+    final trends = activityTrends(batch);
+    final pushUps = trends[activityKey('Push-ups', Measurement.repetitions)]!;
+
+    expect(pushUps.recordCount, 3);
+    expect(pushUps.days, [
+      (
+        day: firstDay,
+        first: 10,
+        latest: 12,
+        best: 12,
+        total: 22,
+        count: 2,
+        latestReps: null,
+        bestReps: null,
+        totalReps: null,
+      ),
+      (
+        day: lastDay,
+        first: 18,
+        latest: 14,
+        best: 18,
+        total: 32,
+        count: 2,
+        latestReps: null,
+        bestReps: null,
+        totalReps: null,
+      ),
+    ]);
+    final bench =
+        trends[activityKey('Bench press', Measurement.weightAndReps)]!;
+    expect(bench.days.single.latestReps, 6);
+    expect(bench.days.single.bestReps, 6);
+    expect(bench.days.single.totalReps, 14);
+    expect(bench.latestSet, (id: null, value: 65000, reps: 6));
+  });
+
   test('canonical receipts ignore JSON order and name spacing but preserve set order', () {
     final example = activityExample(today);
     final canonical = ActivityBatch(
