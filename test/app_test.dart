@@ -137,9 +137,8 @@ void main() {
       try {
         await _pumpApp(tester, repo);
         expect(
-          Theme.of(
-            tester.element(visibleText('Start with one result.')),
-          ).scaffoldBackgroundColor,
+          Theme.of(tester.element(visibleText('Start with one result.')))
+              .scaffoldBackgroundColor,
           background,
         );
         await tester.tap(find.byTooltip('Add entry'));
