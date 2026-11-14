@@ -168,45 +168,10 @@ class _WeightTrendChartState extends State<WeightTrendChart> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Semantics(
-          liveRegion: true,
-          label: 'Selected weigh-in: $selectedLabel',
-          child: ExcludeSemantics(
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: context.colors.surface,
-                border: Border.all(color: context.colors.green, width: 1.5),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Selected weigh-in', style: context.type.bodySmall),
-                  const SizedBox(height: 3),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 2,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        fullDay(selected.day),
-                        style: context.type.titleSmall,
-                      ),
-                      Text(
-                        weight,
-                        style: context.type.titleLarge?.copyWith(
-                          color: context.colors.green,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
+        ChartSelection(
+          label: 'Selected weigh-in',
+          date: fullDay(selected.day),
+          value: weight,
         ),
         const SizedBox(height: Space.sm),
         Semantics(

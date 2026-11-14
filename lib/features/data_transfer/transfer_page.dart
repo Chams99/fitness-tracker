@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,7 +38,6 @@ class _TransferPageState extends ConsumerState<TransferPage> {
   final _previewAnchor = GlobalKey();
   bool _busy = false, _allowRepeat = false, _includeCatalog = false;
   bool _showConflictList = false, _confirming = false;
-  String? _selectedPreviewKey;
   int _shownMappings = 15;
   String? _problem,
       _mappingProblem,
@@ -80,7 +77,6 @@ class _TransferPageState extends ConsumerState<TransferPage> {
     _backupPlan = null;
     _batch = null;
     _activityPlan = null;
-    _selectedPreviewKey = null;
     _previewHash = _problem = _mappingProblem = null;
     _mappings = {};
     _allowRepeat = false;
@@ -226,123 +222,16 @@ class _TransferPageState extends ConsumerState<TransferPage> {
               : 'Add imported results to this exercise',
         ),
     ];
-    final screenHeight = MediaQuery.sizeOf(context).height;
-    final maxHeight = screenHeight * .78;
-    final minHeight = math.min(300.0, maxHeight);
-    final sheetHeight = math
-        .min(maxHeight, math.max(minHeight, 210.0 + options.length * 78.0))
-        .toDouble();
-    final target = await showModalBottomSheet<String>(
-      useRootNavigator: true,
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      constraints: BoxConstraints(maxWidth: 540, maxHeight: maxHeight),
-      builder: (sheetContext) => SafeArea(
-        top: false,
-        child: SizedBox(
-          height: sheetHeight,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Choose destination', style: context.type.titleLarge),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Results from "${record.name}" · ${record.measurement.label}',
-                      style: context.type.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
-                  itemCount: options.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final option = options[index];
-                    final isSelected = option.value == selected;
-                    return Material(
-                      color: isSelected
-                          ? context.colors.green.withValues(alpha: .08)
-                          : context.colors.surface,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        side: BorderSide(
-                          color: isSelected
-                              ? context.colors.green
-                              : context.colors.border,
-                          width: isSelected ? 1.5 : 1,
-                        ),
-                      ),
-                      clipBehavior: Clip.antiAlias,
-                      child: Semantics(
-                        button: true,
-                        selected: isSelected,
-                        child: InkWell(
-                          onTap: () =>
-                              Navigator.pop(sheetContext, option.value),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 12,
-                            ),
-                            child: Row(
-                              children: [
-                                option.value.isEmpty
-                                    ? Icon(
-                                        LucideIcons.plus,
-                                        color: context.colors.green,
-                                        size: 20,
-                                      )
-                                    : ExerciseIcon(option.label),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        option.label,
-                                        style: context.type.titleSmall,
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        option.subtitle,
-                                        style: context.type.bodySmall,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Icon(
-                                  isSelected
-                                      ? LucideIcons.check
-                                      : LucideIcons.chevronRight,
-                                  color: isSelected
-                                      ? context.colors.green
-                                      : context.colors.muted,
-                                  size: 18,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    final target = await chooseOption<String>(
+      context,
+      'Choose destination',
+      options,
+      description:
+          'Results from "${record.name}" · ${record.measurement.label}',
+      selected: selected,
+      leading: (id, name) => id.isEmpty
+          ? const SizedBox(width: 36, child: Icon(LucideIcons.plus, size: 20))
+          : ExerciseIcon(name),
     );
     if (!mounted || target == null) return;
     ExerciseMapping mapping;
@@ -373,7 +262,8 @@ class _TransferPageState extends ConsumerState<TransferPage> {
     ActivityTrend trend,
     String mapping,
   ) async {
-    setState(() => _selectedPreviewKey = group.key);
+    if (_busy) return;
+    final durationStyle = ref.read(durationProvider);
     await showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
@@ -402,66 +292,16 @@ class _TransferPageState extends ConsumerState<TransferPage> {
                 days: trend.days,
                 metric: ChartMetric.latest,
                 measurement: group.value.measurement,
-                durationStyle: ref.read(durationProvider),
+                durationStyle: durationStyle,
               ),
-              const Divider(height: 16),
-              Material(
-                color: context.colors.input,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: context.colors.border),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Semantics(
-                  button: true,
-                  label: 'Save imported results to $mapping',
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      _mapping(group.key, group.value);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            LucideIcons.dumbbell,
-                            color: context.colors.green,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Save imported results to',
-                                  style: context.type.bodySmall,
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  mapping,
-                                  style: context.type.titleSmall?.copyWith(
-                                    color: context.colors.green,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Icon(
-                            LucideIcons.chevronRight,
-                            color: context.colors.muted,
-                            size: 18,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+              const Divider(),
+              RowLink(
+                title: 'Save imported results to',
+                subtitle: mapping,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _mapping(group.key, group.value);
+                },
               ),
               if (_mappings[group.key] case CreateMappedExercise())
                 Padding(
@@ -471,6 +311,67 @@ class _TransferPageState extends ConsumerState<TransferPage> {
                     style: context.type.bodySmall,
                   ),
                 ),
+              QuietButton(
+                'View imported sets',
+                () => _showActivitySets(group, durationStyle),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showActivitySets(
+    MapEntry<String, ActivityRecord> group,
+    DurationStyle durationStyle,
+  ) {
+    final records = _batch!.records
+        .where((record) => record.key == group.key)
+        .toList();
+    return showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: BoxConstraints(
+        maxWidth: 560,
+        maxHeight: MediaQuery.sizeOf(context).height * .75,
+      ),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Imported sets', style: sheetContext.type.titleLarge),
+              Text(group.value.name, style: sheetContext.type.bodySmall),
+              const SizedBox(height: Space.sm),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: records.length,
+                  itemBuilder: (context, index) {
+                    final record = records[index];
+                    return RowLink(
+                      title: fullDay(record.day),
+                      subtitle: record.sets
+                          .map(
+                            (set) => measure(
+                              set.value,
+                              record.measurement,
+                              durationStyle,
+                              accessible: true,
+                              reps: set.reps,
+                            ),
+                          )
+                          .join(' · '),
+                    );
+                  },
+                ),
+              ),
             ],
           ),
         ),
@@ -631,62 +532,62 @@ class _TransferPageState extends ConsumerState<TransferPage> {
       accessible: true,
       reps: trend.latestSet.reps,
     );
-    final selected = _selectedPreviewKey == group.key;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Material(
-        key: ValueKey('activity-preview-${group.key}'),
-        color: selected
-            ? context.colors.green.withValues(alpha: .08)
-            : context.colors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(
-            color: selected ? context.colors.green : context.colors.border,
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => _showActivityTrendPreview(group, trend, mapping),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    SizedBox(width: 104, child: Sparkline(trend.days)),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            group.value.name,
-                            style: context.type.titleSmall,
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${group.value.measurement.label} · $mapping',
-                            style: context.type.bodySmall,
-                          ),
-                        ],
+    return Column(
+      children: [
+        Material(
+          key: ValueKey('activity-preview-${group.key}'),
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: _busy
+                ? null
+                : () => _showActivityTrendPreview(group, trend, mapping),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Space.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      ExerciseIcon(group.value.name),
+                      const SizedBox(width: Space.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              group.value.name,
+                              style: context.type.titleMedium,
+                            ),
+                            Text(
+                              '${group.value.measurement.label} · ${trend.days.length} ${trend.days.length == 1 ? 'date' : 'dates'}',
+                              style: context.type.bodySmall,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Text(
-                      '${trend.days.length} dates',
-                      style: context.type.bodySmall,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text('$range · Latest $latest', style: context.type.bodySmall),
-              ],
+                      const SizedBox(width: Space.sm),
+                      SizedBox(width: 64, child: Sparkline(trend.days)),
+                      const SizedBox(width: Space.sm),
+                      Icon(
+                        LucideIcons.chevronRight,
+                        size: 18,
+                        color: context.colors.muted,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: Space.xs),
+                  Text(mapping, style: context.type.bodyMedium),
+                  Text(
+                    '$range · Latest $latest',
+                    style: context.type.bodySmall,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
+        const Divider(),
+      ],
     );
   }
 
@@ -701,21 +602,21 @@ class _TransferPageState extends ConsumerState<TransferPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${batch.records.length} entries · $setCount sets · ${groups.length} exercise mappings',
-          style: context.type.titleMedium,
+          '${batch.records.length} entries · $setCount sets · ${groups.length} ${groups.length == 1 ? 'exercise' : 'exercises'}',
+          style: context.type.bodyMedium,
         ),
         const SizedBox(height: 6),
         Text(
-          'Review the exercise for each group. An archived exercise stays archived.',
+          'Open an exercise to review its sets or change where they’ll be saved.',
           style: context.type.bodySmall,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: Space.sm),
         for (final group in groups.take(_shownMappings))
           _activityGroupPreview(group, trends[group.key]!, byId),
         if (groups.length > _shownMappings)
           QuietButton(
             'Show more mappings',
-            () => setState(() => _shownMappings += 15),
+            _busy ? null : () => setState(() => _shownMappings += 15),
           ),
         if (_local!.receipts.containsKey(batch.fingerprint)) ...[
           const SizedBox(height: 8),
@@ -997,6 +898,7 @@ class _MappingNameDialogState extends State<_MappingNameDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    scrollable: true,
     title: const Text('Name the new exercise'),
     content: Column(
       mainAxisSize: MainAxisSize.min,
@@ -1008,10 +910,7 @@ class _MappingNameDialogState extends State<_MappingNameDialog> {
           controller: _name,
           autofocus: true,
           textInputAction: TextInputAction.done,
-          decoration: InputDecoration(
-            labelText: 'Exercise name',
-            errorText: _error,
-          ),
+          decoration: lineInput(context, label: 'Exercise name', error: _error),
           onChanged: (_) => setState(() => _error = null),
         ),
       ],

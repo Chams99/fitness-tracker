@@ -7,7 +7,7 @@ import 'package:fitness_tracker/core/database/database.dart'
 import 'package:fitness_tracker/core/database/tracker_repository.dart';
 import 'package:fitness_tracker/core/platform/device_services.dart';
 import 'package:fitness_tracker/features/data_transfer/transfer_codec.dart'
-    show activityExample;
+    show activityExample, activityKey;
 import 'package:fitness_tracker/features/progress/performance_chart.dart'
     show PerformanceChart, Sparkline;
 import 'package:fitness_tracker/main.dart';
@@ -52,6 +52,23 @@ class _DeferredRepository extends TrackerRepository {
     if (!entered.isCompleted) entered.complete();
     await release.future;
     await super.log(drafts);
+  }
+}
+
+class _DeferredImportRepository extends TrackerRepository {
+  _DeferredImportRepository()
+    : super(TrackerDatabase(NativeDatabase.memory()), now: () => fixedNow);
+  final entered = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<void> importActivity(
+    ActivityWrite Function(BackupData current) plan, {
+    bool allowRepeat = false,
+  }) async {
+    entered.complete();
+    await release.future;
+    await super.importActivity(plan, allowRepeat: allowRepeat);
   }
 }
 
@@ -114,6 +131,32 @@ Future<void> tapText(WidgetTester tester, String text) async {
   await tester.tap(visibleText(text).first);
   await tester.pumpAndSettle();
 }
+
+Future<void> _openActivityPreview(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Profile'));
+  await tester.pumpAndSettle();
+  await tapText(tester, 'Your data');
+  await tapText(tester, 'Import from AI chat');
+  await tester.enterText(
+    find.byType(TextField).first,
+    activityExample(CalendarDay.fromDate(fixedNow)),
+  );
+  await tester.tap(visibleText('Validate and preview'));
+
+  // The file parser and snapshot hash run on background isolates.
+  final preview = find.text('Import preview');
+  for (var i = 0; i < 100 && preview.evaluate().isEmpty; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 20)),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+  }
+  expect(preview, findsOneWidget);
+  await tester.pumpAndSettle();
+}
+
+Finder _activityCard(String name, Measurement measurement) =>
+    find.byKey(ValueKey('activity-preview-${activityKey(name, measurement)}'));
 
 void main() {
   for (final (appearance, background, surface) in [
@@ -712,42 +755,35 @@ void main() {
       final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
       try {
         await _pumpApp(tester, repo);
-        await tester.tap(find.byTooltip('Profile'));
-        await tester.pumpAndSettle();
-        await tapText(tester, 'Your data');
-        await tapText(tester, 'Import from AI chat');
-        await tester.enterText(
-          find.byType(TextField).first,
-          activityExample(CalendarDay.fromDate(fixedNow)),
-        );
-        await tapText(tester, 'Validate and preview');
+        await _openActivityPreview(tester);
 
-        expect(find.text('First 3 entries'), findsNothing);
         expect(find.byType(Sparkline), findsNWidgets(4));
-        expect(find.text('Latest 18 reps'), findsOneWidget);
-        expect(find.text('Latest 1 minute, 30 seconds'), findsOneWidget);
-        expect(find.text('Latest 60 kg × 8 reps'), findsOneWidget);
-        await tester.tap(find.byType(Sparkline).first);
+        expect(find.textContaining('Latest 18 reps'), findsOneWidget);
+        expect(
+          find.textContaining('Latest 1 minute, 30 seconds'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Latest 60 kg × 8 reps'), findsOneWidget);
+        final pushUps = _activityCard('Push-ups', Measurement.repetitions);
+        await tester.ensureVisible(pushUps);
+        await tester.pumpAndSettle();
+        await tester.tap(pushUps.hitTestable());
         await tester.pumpAndSettle();
         expect(find.text('Push-ups').hitTestable(), findsOneWidget);
         expect(find.byType(PerformanceChart), findsOneWidget);
         expect(find.text('View all values'), findsOneWidget);
         expect(find.text('Save imported results to'), findsOneWidget);
-        expect(find.text('Choose destination'), findsOneWidget);
-        expect(find.text('Exercise mapping'), findsNothing);
-        expect(find.text('Preview graph'), findsNothing);
-        expect(find.text('Change mapping'), findsNothing);
-        final selectedPreview = tester.widget<Material>(
-          find.byKey(const ValueKey('activity-preview-push-ups')),
-        );
-        expect(
-          (selectedPreview.shape! as RoundedRectangleBorder).side.width,
-          1.5,
-        );
-        expect(
-          tester.getSize(find.byType(PerformanceChart)).height,
-          greaterThan(200),
-        );
+        expect(visibleText('New exercise · Push-ups'), findsOneWidget);
+        final importedSets = find.text('View imported sets');
+        await tester.ensureVisible(importedSets);
+        await tester.pumpAndSettle();
+        await tapText(tester, 'View imported sets');
+        expect(visibleText('Imported sets'), findsOneWidget);
+        expect(visibleText('22 reps · 20 reps · 18 reps'), findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Save imported results to'));
+        await tester.pumpAndSettle();
         await tapText(tester, 'Save imported results to');
         expect(find.text('Choose destination'), findsOneWidget);
         expect(
@@ -759,12 +795,6 @@ void main() {
           find.text('"Push-ups" will be added when you confirm import.'),
           findsOneWidget,
         );
-        expect(
-          tester.getSize(find.byType(ListView).last).height,
-          greaterThan(200),
-        );
-        await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();
         expect(find.text('Confirm import'), findsOneWidget);
@@ -774,6 +804,33 @@ void main() {
       }
     },
   );
+
+  testWidgets('activity previews stay closed while confirming import', (
+    tester,
+  ) async {
+    final repo = _DeferredImportRepository();
+    try {
+      await _pumpApp(tester, repo);
+      await _openActivityPreview(tester);
+      final card = _activityCard('Push-ups', Measurement.repetitions);
+      await tester.ensureVisible(card);
+      await tester.pumpAndSettle();
+      await tester.tap(visibleText('Confirm import'));
+      await tester.pump();
+      expect(repo.entered.isCompleted, isTrue);
+      await tester.tap(card.hitTestable());
+      await tester.pump(const Duration(milliseconds: 350));
+      expect(find.byType(PerformanceChart), findsNothing);
+
+      repo.release.complete();
+      await tester.pumpAndSettle();
+      expect(visibleText('Your data'), findsOneWidget);
+      expect((await repo.snapshot()).entries, hasLength(4));
+    } finally {
+      if (!repo.release.isCompleted) repo.release.complete();
+      await clean(tester, repo);
+    }
+  });
 
   testWidgets(
     'iOS edge swipe returns from Profile and only the tab pill slides',
@@ -858,7 +915,7 @@ void main() {
     },
   );
 
-  testWidgets('single exercise picker has a useful responsive height', (
+  testWidgets('single exercise picker explains how to add another exercise', (
     tester,
   ) async {
     final repo = TrackerRepository(
@@ -880,9 +937,15 @@ void main() {
       await _pumpApp(tester, repo);
       await tapText(tester, 'Progress');
       await tapText(tester, 'Push-ups');
-      final picker = find.byType(ListView).last;
-      expect(tester.getSize(picker).height, greaterThan(200));
-      expect(tester.getSize(picker).height, lessThan(874 * .78));
+      expect(
+        visibleText('This is your only exercise with recorded results.'),
+        findsOneWidget,
+      );
+      expect(visibleText('Log another exercise'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Log another exercise'),
+        findsOneWidget,
+      );
       expect(visibleText('Repetitions'), findsOneWidget);
       expect(tester.takeException(), isNull);
     } finally {
@@ -915,18 +978,19 @@ void main() {
       await _pumpApp(tester, repo);
       await tester.tap(find.text('10 reps · 20 reps · 30 reps · 40 reps …'));
       await tester.pumpAndSettle();
-      expect(visibleText('Push-ups'), findsOneWidget);
-      expect(find.textContaining('2026'), findsOneWidget);
-      expect(visibleText('Repetitions'), findsOneWidget);
-      expect(visibleText('Set 1'), findsOneWidget);
-      expect(visibleText('Edit entry'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        visibleText('Set 5'),
-        250,
-        scrollable: find.byType(Scrollable).last,
-      );
-      expect(visibleText('Set 5'), findsOneWidget);
-      expect(visibleText('50 reps'), findsOneWidget);
+      final sheet = find.byType(BottomSheet);
+      Finder inSheet(String text) =>
+          find.descendant(of: sheet, matching: find.text(text));
+      expect(inSheet('Push-ups'), findsOneWidget);
+      expect(inSheet('12 Nov 2026'), findsOneWidget);
+      expect(inSheet('Repetitions'), findsOneWidget);
+      expect(inSheet('Set 1'), findsOneWidget);
+      expect(inSheet('Edit entry'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Edit entry'), findsOneWidget);
+      await tester.ensureVisible(inSheet('Set 5'));
+      await tester.pumpAndSettle();
+      expect(inSheet('Set 5').hitTestable(), findsOneWidget);
+      expect(inSheet('50 reps').hitTestable(), findsOneWidget);
     } finally {
       await clean(tester, repo);
     }

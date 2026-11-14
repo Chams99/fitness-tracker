@@ -61,6 +61,7 @@ class _EntryRowState extends ConsumerState<EntryRow> {
   Future<void> _showDetails() async {
     final entry = widget.entry, exercise = widget.exercise;
     final style = ref.read(durationProvider);
+    final showSets = exercise.trackSets || entry.sets.length > 1;
     await showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
@@ -80,6 +81,8 @@ class _EntryRowState extends ConsumerState<EntryRow> {
             children: [
               Row(
                 children: [
+                  ExerciseIcon(exercise.name),
+                  const SizedBox(width: Space.sm),
                   Expanded(
                     child: Text(exercise.name, style: context.type.titleLarge),
                   ),
@@ -90,23 +93,43 @@ class _EntryRowState extends ConsumerState<EntryRow> {
                   ),
                 ],
               ),
-              Text(fullDay(entry.day), style: context.type.bodyMedium),
-              const SizedBox(height: Space.xs),
-              Text(exercise.measurement.label, style: context.type.bodySmall),
+              Wrap(
+                spacing: Space.sm,
+                runSpacing: Space.xs,
+                children: [
+                  Text(fullDay(entry.day), style: context.type.bodySmall),
+                  Text(
+                    exercise.measurement.label,
+                    style: context.type.bodySmall,
+                  ),
+                ],
+              ),
               const SizedBox(height: Space.md),
-              const SectionTitle('Recorded sets'),
-              for (final set in entry.sets)
-                RowLink(
-                  title: 'Set ${set.position + 1}',
-                  detail: measure(
-                    set.value,
+              if (showSets) ...[
+                const SectionTitle('Recorded sets'),
+                for (final set in entry.sets)
+                  RowLink(
+                    title: 'Set ${set.position + 1}',
+                    detail: measure(
+                      set.value,
+                      exercise.measurement,
+                      style,
+                      reps: set.reps,
+                    ),
+                    showChevron: false,
+                  ),
+              ] else ...[
+                const SectionTitle('Recorded result'),
+                Text(
+                  measure(
+                    entry.sets.single.value,
                     exercise.measurement,
                     style,
-                    reps: set.reps,
+                    reps: entry.sets.single.reps,
                   ),
-                  separator: true,
-                  showChevron: false,
+                  style: context.type.headlineSmall,
                 ),
+              ],
               if (entry.notes case final note?) ...[
                 const SizedBox(height: Space.sm),
                 const SectionTitle('Note'),
@@ -115,7 +138,7 @@ class _EntryRowState extends ConsumerState<EntryRow> {
               const SizedBox(height: Space.md),
               SizedBox(
                 width: double.infinity,
-                child: OutlinedButton.icon(
+                child: FilledButton.icon(
                   onPressed: () {
                     Navigator.pop(sheetContext);
                     _action('edit');

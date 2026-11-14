@@ -132,54 +132,12 @@ class _PerformanceChartState extends State<PerformanceChart> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Semantics(
-          liveRegion: true,
-          label:
-              '${metric.label}: ${fullDay(selected.day)}, ${_value(selected, accessible: true)}',
-          child: ExcludeSemantics(
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: context.colors.surface,
-                border: Border.all(color: context.colors.green, width: 1.5),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(metric.label, style: context.type.bodySmall),
-                  const SizedBox(height: 3),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 2,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Text(
-                        fullDay(selected.day),
-                        style: context.type.titleSmall,
-                      ),
-                      Text(
-                        _value(selected, accessible: true),
-                        style: context.type.titleLarge?.copyWith(
-                          color: context.colors.green,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
+        ChartSelection(
+          label: metric.label,
+          date: fullDay(selected.day),
+          value: _value(selected, accessible: true),
         ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: _list,
-            child: const Text('View all values'),
-          ),
-        ),
+        const SizedBox(height: Space.sm),
         LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
@@ -220,6 +178,10 @@ class _PerformanceChartState extends State<PerformanceChart> {
               ),
             );
           },
+        ),
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: QuietButton('View all values', _list),
         ),
       ],
     );

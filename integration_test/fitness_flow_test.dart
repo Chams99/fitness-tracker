@@ -11,7 +11,8 @@ import 'package:fitness_tracker/features/profile/profile_page.dart';
 import 'package:fitness_tracker/main.dart';
 import 'package:fitness_tracker/shared/domain/body_metrics.dart';
 import 'package:fitness_tracker/shared/domain/training.dart';
-import 'package:fitness_tracker/shared/widgets/ui.dart' show LargeNumberField;
+import 'package:fitness_tracker/shared/widgets/ui.dart'
+    show LargeNumberField, RowLink;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -217,7 +218,7 @@ void main() {
         await _tap(tester, 'Push-ups');
         await _tap(tester, 'Best result');
         expect(find.textContaining('22 reps'), findsWidgets);
-        await _tap(tester, 'View values');
+        await _tap(tester, 'View all values');
         expect(find.text('Best result by date'), findsOneWidget);
         await _tap(tester, '11 Nov 2026');
         await _tap(tester, 'All time');
@@ -329,9 +330,21 @@ void main() {
       );
       await _reveal(tester, find.text('Import preview', skipOffstage: false));
       expect(find.text('Import preview'), findsOneWidget);
-      expect(find.textContaining('Create "Plank"'), findsOneWidget);
+      expect(find.textContaining('New exercise · Plank'), findsOneWidget);
+      expect((await repo.snapshot()).exercises, isEmpty);
+      await _tap(tester, 'Push-ups');
+      expect(_visible('18 reps'), findsOneWidget);
+      await _tap(tester, 'View imported sets');
+      expect(_visible('22 reps · 20 reps · 18 reps'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await _settle(tester);
+      await _tap(tester, 'Save imported results to');
+      await _tap(tester, 'Create a new exercise');
+      await _tap(tester, 'Use name');
+      expect((await repo.snapshot()).exercises, isEmpty);
       await _tap(tester, 'Confirm import');
       expect((await repo.snapshot()).entries, hasLength(4));
+      expect(find.text('Import preview'), findsNothing);
 
       await _tap(tester, 'Import from AI chat');
       await tester.enterText(
@@ -449,6 +462,15 @@ void main() {
         expect(_visible('Weight history'), findsOneWidget);
         expect(find.text('Recent trend'), findsOneWidget);
         expect(find.text('81.5 kg'), findsOneWidget);
+        final plot = find.byKey(const ValueKey('weight-trend-points'));
+        await _reveal(tester, plot);
+        final plotBounds = tester.getRect(plot);
+        await tester.tapAt(Offset(plotBounds.left + 5, plotBounds.center.dy));
+        await _settle(tester);
+        expect(find.text('81.5 kg'), findsNWidgets(2));
+        await tester.tapAt(Offset(plotBounds.right - 5, plotBounds.center.dy));
+        await _settle(tester);
+        expect(find.text('81.5 kg'), findsOneWidget);
         await capture('07-weight-history');
         await _tap(tester, '10 Nov 2026');
         await tester.enterText(find.byType(TextFormField), '81.25');
@@ -458,7 +480,13 @@ void main() {
         await _tap(tester, 'Delete weigh-in');
         await _tap(tester, 'Delete weigh-in');
         expect((await repo.snapshot()).body!.weighIns.single.grams, 80125);
-        await _tap(tester, '12 Nov 2026');
+        final weighIn = find.descendant(
+          of: find.byType(RowLink),
+          matching: find.text('12 Nov 2026'),
+        );
+        await _reveal(tester, weighIn);
+        await tester.tap(weighIn.hitTestable());
+        await _settle(tester);
         await _tap(tester, 'lb');
         await _tap(tester, 'Save weight');
         final body = (await repo.snapshot()).body!;
