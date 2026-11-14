@@ -116,6 +116,10 @@ class _EntryRowState extends ConsumerState<EntryRow> {
                       style,
                       reps: set.reps,
                     ),
+                    detailStyle: context.type.bodySmall?.copyWith(
+                      color: context.colors.green,
+                      fontFeatures: numeric,
+                    ),
                     showChevron: false,
                   ),
               ] else ...[
@@ -127,7 +131,10 @@ class _EntryRowState extends ConsumerState<EntryRow> {
                     style,
                     reps: entry.sets.single.reps,
                   ),
-                  style: context.type.headlineSmall,
+                  style: context.type.headlineSmall?.copyWith(
+                    color: context.colors.green,
+                    fontFeatures: numeric,
+                  ),
                 ),
               ],
               if (entry.notes case final note?) ...[
