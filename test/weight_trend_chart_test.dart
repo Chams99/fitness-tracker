@@ -2,8 +2,8 @@ import 'package:fitness_tracker/app/theme.dart';
 import 'package:fitness_tracker/features/profile/weight_page.dart';
 import 'package:fitness_tracker/shared/domain/body_metrics.dart';
 import 'package:fitness_tracker/shared/domain/training.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() {
   testWidgets('selecting a weight point updates the dated accessible readout', (

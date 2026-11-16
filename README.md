@@ -17,7 +17,7 @@ Captured on an iPhone simulator with fictional workouts.
 
 ## Run locally
 
-Follow [Flutter's installation guide](https://docs.flutter.dev/install) and use [Flutter 3.47.5](https://docs.flutter.dev/install/archive), which includes Dart 3.13.4. Once Flutter is on your PATH, you can run the [host checks](docs/testing.md#run-host-checks) on Windows, macOS, or Linux without a device or mobile SDK.
+Follow [Flutter's installation guide](https://docs.flutter.dev/install) and use [Flutter 3.50.0](https://docs.flutter.dev/install/archive), which includes Dart 3.14.0. Once Flutter is on your PATH, you can run the [host checks](docs/testing.md#run-host-checks) on Windows, macOS, or Linux without a device or mobile SDK.
 
 To launch the app, set up an [Android target](https://docs.flutter.dev/platform-integration/android/setup) on Windows, macOS, or Linux, or an [iOS target](https://docs.flutter.dev/platform-integration/ios/setup) with Xcode on macOS. The app runs on Android, iPhone, and iPad. Windows, macOS, and Linux are development hosts.
 

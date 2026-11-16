@@ -9,10 +9,10 @@ import 'package:fitness_tracker/features/data_transfer/import_plan.dart';
 import 'package:fitness_tracker/features/progress/performance_chart.dart';
 import 'package:fitness_tracker/main.dart';
 import 'package:fitness_tracker/shared/domain/training.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 import '../tool/demo_data.dart';
@@ -86,7 +86,7 @@ void main() {
     await tap(visible('History'));
     await capture('history', visible('Plank'));
 
-    await tap(find.byTooltip('Add entry').hitTestable());
+    await tap(find.bySemanticsLabel('Add entry').hitTestable());
     await tap(visible('Push-ups'));
     Future<void> enterReps(String reps) async {
       await tester.enterText(find.byType(TextFormField).first, reps);

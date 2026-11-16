@@ -8,15 +8,15 @@ import 'package:fitness_tracker/core/database/tracker_repository.dart';
 import 'package:fitness_tracker/core/platform/device_services.dart';
 import 'package:fitness_tracker/features/data_transfer/transfer_codec.dart'
     show activityExample, activityKey;
+import 'package:fitness_tracker/features/profile/profile_page.dart';
 import 'package:fitness_tracker/features/progress/performance_chart.dart'
     show PerformanceChart, Sparkline;
 import 'package:fitness_tracker/main.dart';
-import 'package:fitness_tracker/features/profile/profile_page.dart';
 import 'package:fitness_tracker/shared/domain/body_metrics.dart';
 import 'package:fitness_tracker/shared/domain/training.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 final fixedNow = DateTime(2026, 11, 12, 12);
 
@@ -184,7 +184,7 @@ void main() {
               .scaffoldBackgroundColor,
           background,
         );
-        await tester.tap(find.byTooltip('Add entry'));
+        await tester.tap(find.bySemanticsLabel('Add entry'));
         await tester.pumpAndSettle();
         await tapText(tester, 'Push-ups');
         await tapText(tester, 'Change');
@@ -210,7 +210,7 @@ void main() {
       );
       try {
         await _pumpApp(tester, repo);
-        final add = find.byTooltip('Add entry');
+        final add = find.bySemanticsLabel('Add entry');
         const backdrop = Offset(20, 34);
         final sheet = find.byType(BottomSheet);
         await tester.tap(add);
@@ -268,7 +268,7 @@ void main() {
       );
       try {
         await _pumpApp(tester, repo);
-        await tester.tap(find.byTooltip('Add entry'));
+        await tester.tap(find.bySemanticsLabel('Add entry'));
         await tester.pumpAndSettle();
         await tapText(tester, 'Push-ups');
         await tester.enterText(find.byType(TextFormField), '19');
@@ -739,7 +739,7 @@ void main() {
       expect(snapshot.entries.single.best, 60500);
       await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Add entry'));
+      await tester.tap(find.bySemanticsLabel('Add entry'));
       await tester.pumpAndSettle();
       await tapText(tester, 'Bench press');
       expect(visibleText('Save activity'), findsOneWidget);
