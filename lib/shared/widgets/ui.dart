@@ -43,6 +43,7 @@ class AsyncPanel<T> extends StatelessWidget {
     this.retry,
     required this.loading,
     this.loadingLabel = 'Loading records',
+    this.fadeContent = true,
     super.key,
   });
   final AsyncValue<T> value;
@@ -50,6 +51,7 @@ class AsyncPanel<T> extends StatelessWidget {
   final VoidCallback? retry;
   final Widget loading;
   final String loadingLabel;
+  final bool fadeContent;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +69,7 @@ class AsyncPanel<T> extends StatelessWidget {
     return SkeletonCrossfade(
       placeholder: loading,
       loadingLabel: loadingLabel,
+      fadeContent: fadeContent,
       child: value.hasValue ? builder(value.requireValue) : null,
     );
   }
@@ -78,12 +81,16 @@ class SkeletonCrossfade extends StatefulWidget {
     required this.placeholder,
     required this.child,
     this.loadingLabel,
+    this.fadeContent = true,
     super.key,
   });
 
   final Widget placeholder;
   final Widget? child;
   final String? loadingLabel;
+
+  /// When false, only [Skeleton] and [SkeletonDivider] paint with fading color.
+  final bool fadeContent;
 
   @override
   State<SkeletonCrossfade> createState() => _SkeletonCrossfadeState();
@@ -133,17 +140,25 @@ class _SkeletonCrossfadeState extends State<SkeletonCrossfade> {
                     constraints: constraints,
                     child: ExcludeSemantics(
                       child: IgnorePointer(
-                        child: Opacity(opacity: 1 - progress, child: outgoing),
+                        child: widget.fadeContent
+                            ? Opacity(opacity: 1 - progress, child: outgoing)
+                            : _SkeletonFade(
+                                opacity: 1 - progress,
+                                child: outgoing,
+                              ),
                       ),
                     ),
                   ),
                 ),
-              Opacity(
-                // Keep real content visible from the first resolved frame.
-                opacity: .25 + .75 * progress,
-                alwaysIncludeSemantics: true,
-                child: child,
-              ),
+              if (widget.fadeContent)
+                Opacity(
+                  // Keep real content visible from the first resolved frame.
+                  opacity: .25 + .75 * progress,
+                  alwaysIncludeSemantics: true,
+                  child: child,
+                )
+              else
+                child!,
             ],
           );
         },
@@ -151,6 +166,24 @@ class _SkeletonCrossfadeState extends State<SkeletonCrossfade> {
       ),
     );
   }
+}
+
+class _SkeletonFade extends InheritedWidget {
+  const _SkeletonFade({required this.opacity, required super.child});
+
+  final double opacity;
+
+  static Color colorOf(BuildContext context) {
+    final color = context.colors.border;
+    final fade = context.dependOnInheritedWidgetOfExactType<_SkeletonFade>();
+    return fade == null
+        ? color
+        : color.withValues(alpha: color.a * fade.opacity);
+  }
+
+  @override
+  bool updateShouldNotify(_SkeletonFade oldWidget) =>
+      opacity != oldWidget.opacity;
 }
 
 class EmptyStateIllustration extends StatelessWidget {
@@ -174,6 +207,7 @@ class EmptyStateIllustration extends StatelessWidget {
         fit: BoxFit.contain,
         excludeFromSemantics: true,
         frameBuilder: (_, child, frame, _) => SkeletonCrossfade(
+          fadeContent: false,
           placeholder: AspectRatio(
             aspectRatio: aspectRatio,
             child: const Skeleton(height: double.infinity),
@@ -204,12 +238,22 @@ class Skeleton extends StatelessWidget {
     height: height,
     child: DecoratedBox(
       decoration: BoxDecoration(
-        color: context.colors.border,
+        color: _SkeletonFade.colorOf(context),
         shape: circular ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: circular ? null : BorderRadius.circular(4),
       ),
     ),
   );
+}
+
+class SkeletonDivider extends StatelessWidget {
+  const SkeletonDivider({this.height, super.key});
+
+  final double? height;
+
+  @override
+  Widget build(BuildContext context) =>
+      Divider(height: height, color: _SkeletonFade.colorOf(context));
 }
 
 /// Uses a real line of text to reserve the correct height at any text size.
@@ -277,7 +321,7 @@ class SkeletonRows extends StatelessWidget {
             ],
           ),
         ),
-        const Divider(height: 1),
+        const SkeletonDivider(height: 1),
       ],
     ],
   );
@@ -428,6 +472,7 @@ class ScreenHeading extends StatelessWidget {
     this.title, {
     this.subtitle,
     this.subtitleLoading = false,
+    this.fadeSubtitle = true,
     this.action,
     this.leading,
     this.top = Space.md,
@@ -437,6 +482,7 @@ class ScreenHeading extends StatelessWidget {
   final String title;
   final String? subtitle;
   final bool subtitleLoading;
+  final bool fadeSubtitle;
   final Widget? action, leading;
   final double top, bottom;
 
@@ -460,6 +506,7 @@ class ScreenHeading extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: SkeletonCrossfade(
+                    fadeContent: fadeSubtitle,
                     placeholder: SkeletonText(
                       width: 140,
                       style: context.type.bodyMedium,

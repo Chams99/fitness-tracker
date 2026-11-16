@@ -118,6 +118,7 @@ class _ProgressPageState extends ConsumerState<ProgressPage> {
         AsyncPanel(
           pageData,
           loadingLabel: 'Loading progress',
+          fadeContent: false,
           loading: const _ProgressSkeleton(),
           retry: retry,
           builder: (exercise) {
@@ -141,6 +142,7 @@ class _ProgressPageState extends ConsumerState<ProgressPage> {
                 AsyncPanel(
                   data,
                   loadingLabel: 'Loading performance',
+                  fadeContent: false,
                   loading: const PerformanceSkeleton.progress(),
                   retry: retry,
                   builder: (data) => _PerformanceContent(
@@ -251,7 +253,7 @@ class PerformanceSkeleton extends StatelessWidget {
       if (!_progressTab) const SizedBox(height: Space.sm),
       SkeletonText(width: 116, style: context.type.bodySmall),
       SizedBox(height: _progressTab ? 14 : Space.lg),
-      const Divider(),
+      const SkeletonDivider(),
       SizedBox(height: _progressTab ? 15 : Space.md),
       SkeletonText(width: 138, style: context.type.titleLarge),
       if (_progressTab) ...[

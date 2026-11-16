@@ -5,6 +5,53 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
 void main() {
+  testWidgets('ready content paints at full opacity during a skeleton fade', (
+    tester,
+  ) async {
+    Future<void> show(AsyncValue<String> value) => tester.pumpWidget(
+      MaterialApp(
+        theme: trackerTheme(Brightness.light),
+        home: Scaffold(
+          body: AsyncPanel(
+            value,
+            fadeContent: false,
+            loading: const Column(
+              children: [Skeleton(width: 100, height: 24), SkeletonDivider()],
+            ),
+            builder: Text.new,
+          ),
+        ),
+      ),
+    );
+
+    final content = find.text('Ready data');
+    final skeleton = find.byType(Skeleton);
+    final divider = find.byType(Divider);
+    double skeletonAlpha() {
+      final box = tester.widget<DecoratedBox>(
+        find.descendant(of: skeleton, matching: find.byType(DecoratedBox)),
+      );
+      return (box.decoration as BoxDecoration).color!.a;
+    }
+
+    await show(const AsyncLoading());
+    final pendingAlpha = skeletonAlpha();
+    await show(const AsyncData('Ready data'));
+    expect(content, findsOneWidget);
+    expect(
+      find.ancestor(of: content, matching: find.byType(Opacity)),
+      findsNothing,
+    );
+    expect(skeletonAlpha(), pendingAlpha);
+    await tester.pump(const Duration(milliseconds: 90));
+    expect(skeletonAlpha(), inExclusiveRange(0, pendingAlpha));
+    expect(tester.widget<Divider>(divider).color!.a, skeletonAlpha());
+    await tester.pumpAndSettle();
+    expect(skeleton, findsNothing);
+    expect(divider, findsNothing);
+    expect(content, findsOneWidget);
+  });
+
   testWidgets('an empty result can be narrower than the outgoing rows', (
     tester,
   ) async {

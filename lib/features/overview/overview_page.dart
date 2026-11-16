@@ -34,6 +34,7 @@ class OverviewPage extends ConsumerWidget {
         ScreenHeading(
           'Overview',
           subtitleLoading: !value.hasValue && !value.hasError,
+          fadeSubtitle: false,
           subtitle: exerciseCount == 0
               ? null
               : '$exerciseCount ${exerciseCount == 1 ? 'exercise' : 'exercises'} · '
@@ -47,6 +48,7 @@ class OverviewPage extends ConsumerWidget {
         AsyncPanel(
           content,
           loadingLabel: 'Loading overview',
+          fadeContent: false,
           loading: ResponsiveSplit(
             main: _OverviewSectionSkeleton(
               headingWidth: 117,
