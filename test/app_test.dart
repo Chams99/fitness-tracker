@@ -1264,6 +1264,18 @@ void main() {
           tester.widget<ProfileAvatar>(avatar).preset,
           AvatarPreset.anonymous,
         );
+        final defaultImage = find.descendant(
+          of: avatar,
+          matching: find.byType(Image),
+        );
+        expect(
+          tester.widget<Image>(defaultImage).image,
+          isA<AssetImage>().having(
+            (image) => image.assetName,
+            'asset name',
+            'assets/avatars/anonymous.webp',
+          ),
+        );
 
         await repo.saveProfileAvatar(AvatarPreset.strength);
         await tester.pumpAndSettle();

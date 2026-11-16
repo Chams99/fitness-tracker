@@ -75,7 +75,7 @@ The bottom navigation consists of two physically separate elements:
 
 Start with a 56-unit height, a 12-unit gap, and approximately 20-unit outer margins. Place both elements above the bottom safe area. Add content padding so the final row can scroll clear of them. Preserve the two-element composition on narrow screens and with larger text; do not replace it with a conventional full-width tab bar.
 
-Overview places the Profile button beside the page heading. Show the saved avatar in a 48-unit circular button with a neutral border. Keep the Profile label for assistive technology and use the person icon while an avatar loads or when no avatar is set.
+Overview places the Profile button beside the page heading. Show the saved avatar in a 48-unit circular button with a neutral border. Keep the Profile label for assistive technology and show the bundled Default avatar image while a saved image loads or when no other avatar is set.
 
 Secondary pages use platform navigation. Add entry uses a sheet with a Back action between steps, including exercise creation. The sheet closes on a downward drag or outside tap and asks before discarding a draft. Focused forms have one clear save action.
 
