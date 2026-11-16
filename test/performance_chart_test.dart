@@ -1,8 +1,8 @@
 import 'package:fitness_tracker/app/theme.dart';
 import 'package:fitness_tracker/features/progress/performance_chart.dart';
 import 'package:fitness_tracker/shared/domain/training.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 final firstDay = CalendarDay.parse('2026-11-10');
 final lastDay = CalendarDay.parse('2026-11-12');
