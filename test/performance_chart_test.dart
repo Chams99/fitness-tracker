@@ -19,11 +19,16 @@ Future<void> pumpChart(
       home: Scaffold(
         body: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: PerformanceChart(
-            days: days,
-            metric: metric,
-            measurement: measurement,
-            durationStyle: DurationStyle.clock,
+          child: Column(
+            children: [
+              PerformanceChart(
+                days: days,
+                metric: metric,
+                measurement: measurement,
+                durationStyle: DurationStyle.clock,
+              ),
+              const SizedBox(height: 800),
+            ],
           ),
         ),
       ),
@@ -31,6 +36,13 @@ Future<void> pumpChart(
   );
   await tester.pumpAndSettle();
 }
+
+final plot = find
+    .descendant(
+      of: find.byType(PerformanceChart),
+      matching: find.byType(CustomPaint),
+    )
+    .first;
 
 void main() {
   testWidgets('selected points show the full date and repetition value', (
@@ -67,12 +79,6 @@ void main() {
 
     expect(find.text('12 Nov 2026'), findsOneWidget);
     expect(find.text('18 reps'), findsOneWidget);
-    final plot = find
-        .descendant(
-          of: find.byType(PerformanceChart),
-          matching: find.byType(CustomPaint),
-        )
-        .first;
     final plotRect = tester.getRect(plot);
     await tester.tapAt(Offset(plotRect.left + 2, plotRect.center.dy));
     await tester.pumpAndSettle();
@@ -81,6 +87,68 @@ void main() {
     expect(find.text('12 reps'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  for (final metric in [ChartMetric.latest, ChartMetric.volume]) {
+    testWidgets(
+      '${metric.label} snaps during drag and permits vertical scrolling',
+      (tester) async {
+        await pumpChart(
+          tester,
+          measurement: Measurement.repetitions,
+          metric: metric,
+          days: [
+            for (final (offset, latest, total) in [
+              (0, 10, 19),
+              (2, 9, 17),
+              (10, 14, 26),
+            ])
+              (
+                day: firstDay.plusDays(offset),
+                first: total - latest,
+                latest: latest,
+                best: latest > total - latest ? latest : total - latest,
+                total: total,
+                count: 2,
+                latestReps: null,
+                bestReps: null,
+                totalReps: null,
+              ),
+          ],
+        );
+        final bounds = tester.getRect(plot);
+        final scroll = tester.state<ScrollableState>(find.byType(Scrollable));
+        Offset position(double fraction) =>
+            Offset(bounds.left + bounds.width * fraction, bounds.center.dy);
+
+        final drag = await tester.startGesture(position(.95));
+        await drag.moveTo(position(.35));
+        await tester.pump();
+        expect(find.text('12 Nov 2026'), findsOneWidget);
+        expect(
+          find.text(metric == ChartMetric.latest ? '9 reps' : '17 reps'),
+          findsOneWidget,
+        );
+
+        await drag.moveTo(position(.02));
+        await tester.pump();
+        expect(find.text('10 Nov 2026'), findsOneWidget);
+        expect(
+          find.text(metric == ChartMetric.latest ? '10 reps' : '19 reps'),
+          findsOneWidget,
+        );
+        await drag.up();
+        await tester.pumpAndSettle();
+        expect(scroll.position.pixels, 0);
+        expect(find.text('10 Nov 2026'), findsOneWidget);
+
+        await tester.dragFrom(position(.8), const Offset(0, -80));
+        await tester.pumpAndSettle();
+        expect(scroll.position.pixels, greaterThan(0));
+        expect(find.text('10 Nov 2026'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets('selected duration points spell out minutes and seconds', (
     tester,

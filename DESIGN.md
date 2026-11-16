@@ -134,6 +134,7 @@ Use **Latest set** and **Best set** as two views of the same performance chart. 
 - Plot the last set per recorded date in Latest set mode and the day's maximum in Best set mode. Keep all individual attempts accessible in History.
 - Use a thin solid green line and visible recorded points. Do not fill the area with a gradient.
 - A selected point shows the exact date, value, and unit. Provide an accessible text/list alternative to touch selection.
+- On performance and daily volume charts, tap or drag horizontally across the plot to select the nearest recorded date. Keep the last selection when the gesture ends and let vertical swipes scroll the page.
 - Lines connect observations; they do not create intermediate records. Missing dates remain gaps without zero-valued marks.
 - Keep y-axis labels readable and use a zero baseline for volume bars. Avoid smoothed curves that exaggerate peaks or declines.
 - Apply 7-day, 30-day, 90-day, last-year, all-time, and inclusive custom filters to all range statistics.
