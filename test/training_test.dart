@@ -50,6 +50,9 @@ void main() {
         best: 12,
         total: 12,
         count: 1,
+        latestReps: null,
+        bestReps: null,
+        totalReps: null,
       );
       final worse = (
         day: date.plusDays(1),
@@ -58,6 +61,9 @@ void main() {
         best: 9,
         total: 9,
         count: 1,
+        latestReps: null,
+        bestReps: null,
+        totalReps: null,
       );
       expect(Performance([]).latest, isNull);
       expect(Performance([]).total, 0);
@@ -66,7 +72,17 @@ void main() {
       expect(Performance([one, worse]).percent, -25);
       expect(
         Performance([
-          (day: date, first: 0, latest: 0, best: 0, total: 0, count: 1),
+          (
+            day: date,
+            first: 0,
+            latest: 0,
+            best: 0,
+            total: 0,
+            count: 1,
+            latestReps: null,
+            bestReps: null,
+            totalReps: null,
+          ),
           worse,
         ]).percent,
         isNull,
@@ -85,8 +101,17 @@ void main() {
         deadline: deadline,
         updatedAt: DateTime.utc(2026, 10, 1),
       );
-      DailyResult day(CalendarDay day) =>
-          (day: day, first: 22, latest: 18, best: 22, total: 60, count: 3);
+      DailyResult day(CalendarDay day) => (
+        day: day,
+        first: 22,
+        latest: 18,
+        best: 22,
+        total: 60,
+        count: 3,
+        latestReps: null,
+        bestReps: null,
+        totalReps: null,
+      );
       expect(goalStatus(goal, [day(deadline)], today), GoalStatus.achieved);
       expect(
         goalStatus(goal, [day(deadline.plusDays(1))], today),

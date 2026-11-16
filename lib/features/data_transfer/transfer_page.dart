@@ -8,6 +8,7 @@ import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
 import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
+import '../progress/performance_chart.dart';
 import 'import_plan.dart';
 import 'transfer_codec.dart';
 
@@ -183,35 +184,54 @@ class _TransferPageState extends ConsumerState<TransferPage> {
     }
   }
 
+  String _activityDestination(
+    String key,
+    Map<String, Exercise> byId,
+  ) => switch (_mappings[key]) {
+    CreateMappedExercise(:final name) => 'New exercise · $name',
+    MapToExercise(:final id) =>
+      'Existing exercise · ${byId[id]?.name ?? id}${byId[id]?.archived == true ? ' (archived)' : ''}',
+    null => 'Choose destination',
+  };
+
   Future<void> _mapping(String key, ActivityRecord record) async {
-    final candidates = _local!.exercises.where(
-      (exercise) => exercise.measurement == record.measurement,
-    );
+    final candidates = _local!.exercises
+        .where((exercise) => exercise.measurement == record.measurement)
+        .toList();
     final selected = switch (_mappings[key]) {
       MapToExercise(:final id) => id,
       CreateMappedExercise() => '',
       null => null,
     };
+    final proposedName = switch (_mappings[key]) {
+      CreateMappedExercise(:final name) => name,
+      _ => record.name,
+    };
+    final options = [
+      (
+        value: '',
+        label: 'Create a new exercise',
+        subtitle: '"$proposedName" will be added when you confirm import.',
+      ),
+      for (final x in candidates)
+        (
+          value: x.id,
+          label: x.name,
+          subtitle: x.archived
+              ? 'Use this archived exercise · it stays archived'
+              : 'Add imported results to this exercise',
+        ),
+    ];
     final target = await chooseOption<String>(
       context,
-      'Map ${record.name}',
-      [
-        (
-          value: '',
-          label: 'Create an exercise',
-          subtitle: 'Choose a unique name',
-        ),
-        for (final x in candidates)
-          (
-            value: x.id,
-            label: x.name,
-            subtitle: x.archived
-                ? 'Archived · stays archived'
-                : x.measurement.label,
-          ),
-      ],
+      'Choose destination',
+      options,
+      description:
+          'Results from "${record.name}" · ${record.measurement.label}',
       selected: selected,
-      leading: (id, name) => id.isEmpty ? null : ExerciseIcon(name),
+      leading: (id, name) => id.isEmpty
+          ? const SizedBox(width: 36, child: Icon(LucideIcons.plus, size: 20))
+          : ExerciseIcon(name),
     );
     if (!mounted || target == null) return;
     ExerciseMapping mapping;
@@ -235,6 +255,128 @@ class _TransferPageState extends ConsumerState<TransferPage> {
       _replanActivity();
       _problem = null;
     });
+  }
+
+  Future<void> _showActivityTrendPreview(
+    MapEntry<String, ActivityRecord> group,
+    ActivityTrend trend,
+    String mapping,
+  ) async {
+    if (_busy) return;
+    final durationStyle = ref.read(durationProvider);
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: BoxConstraints(
+        maxWidth: 560,
+        maxHeight: MediaQuery.sizeOf(context).height * .92,
+      ),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(group.value.name, style: context.type.titleLarge),
+              const SizedBox(height: 4),
+              Text(
+                '${trend.days.length} dates · ${group.value.measurement.label}',
+                style: context.type.bodySmall,
+              ),
+              const SizedBox(height: 8),
+              PerformanceChart(
+                days: trend.days,
+                metric: ChartMetric.latest,
+                measurement: group.value.measurement,
+                durationStyle: durationStyle,
+              ),
+              const Divider(),
+              RowLink(
+                title: 'Save imported results to',
+                subtitle: mapping,
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _mapping(group.key, group.value);
+                },
+              ),
+              if (_mappings[group.key] case CreateMappedExercise())
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 4),
+                  child: Text(
+                    'Added only after you confirm the import.',
+                    style: context.type.bodySmall,
+                  ),
+                ),
+              QuietButton(
+                'View imported sets',
+                () => _showActivitySets(group, durationStyle),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showActivitySets(
+    MapEntry<String, ActivityRecord> group,
+    DurationStyle durationStyle,
+  ) {
+    final records = _batch!.records
+        .where((record) => record.key == group.key)
+        .toList();
+    return showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      useSafeArea: true,
+      constraints: BoxConstraints(
+        maxWidth: 560,
+        maxHeight: MediaQuery.sizeOf(context).height * .75,
+      ),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Imported sets', style: sheetContext.type.titleLarge),
+              Text(group.value.name, style: sheetContext.type.bodySmall),
+              const SizedBox(height: Space.sm),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: records.length,
+                  itemBuilder: (context, index) {
+                    final record = records[index];
+                    return RowLink(
+                      title: fullDay(record.day),
+                      subtitle: record.sets
+                          .map(
+                            (set) => measure(
+                              set.value,
+                              record.measurement,
+                              durationStyle,
+                              accessible: true,
+                              reps: set.reps,
+                            ),
+                          )
+                          .join(' · '),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _copy(String text, String label) async {
@@ -373,9 +515,86 @@ class _TransferPageState extends ConsumerState<TransferPage> {
     }, fallback: 'Couldn’t import. Your local records were not changed.');
   }
 
+  Widget _activityGroupPreview(
+    MapEntry<String, ActivityRecord> group,
+    ActivityTrend trend,
+    Map<String, Exercise> byId,
+  ) {
+    final mapping = _activityDestination(group.key, byId);
+    final first = trend.days.first.day, last = trend.days.last.day;
+    final range = first == last
+        ? fullDay(first)
+        : '${fullDay(first)} – ${fullDay(last)}';
+    final latest = measure(
+      trend.latestSet.value,
+      group.value.measurement,
+      ref.watch(durationProvider),
+      accessible: true,
+      reps: trend.latestSet.reps,
+    );
+    return Column(
+      children: [
+        Material(
+          key: ValueKey('activity-preview-${group.key}'),
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: _busy
+                ? null
+                : () => _showActivityTrendPreview(group, trend, mapping),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: Space.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      ExerciseIcon(group.value.name),
+                      const SizedBox(width: Space.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              group.value.name,
+                              style: context.type.titleMedium,
+                            ),
+                            Text(
+                              '${group.value.measurement.label} · ${trend.days.length} ${trend.days.length == 1 ? 'date' : 'dates'}',
+                              style: context.type.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: Space.sm),
+                      SizedBox(width: 64, child: Sparkline(trend.days)),
+                      const SizedBox(width: Space.sm),
+                      Icon(
+                        LucideIcons.chevronRight,
+                        size: 18,
+                        color: context.colors.muted,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: Space.xs),
+                  Text(mapping, style: context.type.bodyMedium),
+                  Text(
+                    '$range · Latest $latest',
+                    style: context.type.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const Divider(),
+      ],
+    );
+  }
+
   Widget _activityPreview() {
     final batch = _batch!;
     final groups = activityGroups(batch).entries.toList();
+    final trends = activityTrends(batch);
     final plan = _activityPlan;
     final byId = {for (final x in _local!.exercises) x.id: x};
     final setCount = batch.records.fold(0, (total, r) => total + r.sets.length);
@@ -383,30 +602,21 @@ class _TransferPageState extends ConsumerState<TransferPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${batch.records.length} entries · $setCount sets · ${groups.length} exercise mappings',
-          style: context.type.titleMedium,
+          '${batch.records.length} entries · $setCount sets · ${groups.length} ${groups.length == 1 ? 'exercise' : 'exercises'}',
+          style: context.type.bodyMedium,
         ),
         const SizedBox(height: 6),
         Text(
-          'Review the exercise for each group. An archived exercise stays archived.',
+          'Open an exercise to review its sets or change where they’ll be saved.',
           style: context.type.bodySmall,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: Space.sm),
         for (final group in groups.take(_shownMappings))
-          RowLink(
-            title: group.value.name,
-            subtitle:
-                '${group.value.measurement.label} · ${switch (_mappings[group.key]) {
-                  CreateMappedExercise(:final name) => 'Create "$name"',
-                  MapToExercise(:final id) => 'Use "${byId[id]?.name ?? id}"${byId[id]?.archived == true ? ' (archived)' : ''}',
-                  null => 'Choose a mapping',
-                }}',
-            onTap: _busy ? null : () => _mapping(group.key, group.value),
-          ),
+          _activityGroupPreview(group, trends[group.key]!, byId),
         if (groups.length > _shownMappings)
           QuietButton(
             'Show more mappings',
-            () => setState(() => _shownMappings += 15),
+            _busy ? null : () => setState(() => _shownMappings += 15),
           ),
         if (_local!.receipts.containsKey(batch.fingerprint)) ...[
           const SizedBox(height: 8),
@@ -429,17 +639,6 @@ class _TransferPageState extends ConsumerState<TransferPage> {
               '${plan.possibleDuplicates} possible matches with existing activity. These entries will be kept if you confirm.',
               style: context.type.bodySmall,
             ),
-          ),
-        const SizedBox(height: 8),
-        Text(
-          'First ${batch.records.length < 3 ? batch.records.length : 3} entries',
-          style: context.type.titleSmall,
-        ),
-        for (final record in batch.records.take(3))
-          RowLink(
-            title: '${record.name} · ${fullDay(record.day)}',
-            subtitle:
-                '${record.sets.take(8).map((s) => measure(s.value, record.measurement, DurationStyle.seconds, reps: s.reps)).join(' · ')}${record.sets.length > 8 ? ' …' : ''}',
           ),
         FormProblem(_mappingProblem),
       ],
@@ -699,13 +898,22 @@ class _MappingNameDialogState extends State<_MappingNameDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('New exercise name'),
-    content: TextField(
-      controller: _name,
-      autofocus: true,
-      textInputAction: TextInputAction.done,
-      decoration: InputDecoration(labelText: 'Name', errorText: _error),
-      onChanged: (_) => setState(() => _error = null),
+    scrollable: true,
+    title: const Text('Name the new exercise'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('It will be created when you confirm the import.'),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _name,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          decoration: lineInput(context, label: 'Exercise name', error: _error),
+          onChanged: (_) => setState(() => _error = null),
+        ),
+      ],
     ),
     actions: [
       TextButton(

@@ -301,6 +301,9 @@ typedef DailyResult = ({
   int best,
   int total,
   int count,
+  int? latestReps,
+  int? bestReps,
+  int? totalReps,
 });
 
 class Performance {

@@ -125,7 +125,7 @@ class _WeightTrend extends ConsumerWidget {
               style: context.type.bodySmall,
             ),
             const SizedBox(height: Space.md),
-            _WeightChart(records: records.reversed.toList(), unit: unit),
+            WeightTrendChart(records: records.reversed.toList(), unit: unit),
           ],
         );
       },
@@ -133,86 +133,172 @@ class _WeightTrend extends ConsumerWidget {
   }
 }
 
-class _WeightChart extends StatelessWidget {
-  const _WeightChart({required this.records, required this.unit});
+class WeightTrendChart extends StatefulWidget {
+  const WeightTrendChart({
+    required this.records,
+    required this.unit,
+    super.key,
+  });
 
   final List<WeighIn> records;
   final WeightUnit unit;
 
   @override
+  State<WeightTrendChart> createState() => _WeightTrendChartState();
+}
+
+class _WeightTrendChartState extends State<WeightTrendChart> {
+  CalendarDay? _selectedDay;
+
+  @override
   Widget build(BuildContext context) {
+    final records = [...widget.records]..sort((a, b) => a.day.compareTo(b.day));
+    if (records.isEmpty) return const SizedBox.shrink();
+    final selected =
+        records.where((record) => record.day == _selectedDay).firstOrNull ??
+        records.last;
+    final selectedIndex = records.indexOf(selected);
     final lowest = records.map((r) => r.grams).reduce(math.min);
     final highest = records.map((r) => r.grams).reduce(math.max);
     final bottom = math.max(0, lowest - 500);
     final top = math.max(bottom + 1000, highest + 500);
     final scale = MediaQuery.textScalerOf(context).scale(1);
-    return ExcludeSemantics(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            height: math.max(144, 65 * scale),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    for (final grams in [top, (top + bottom) / 2, bottom])
-                      Text(
-                        measurementText(
-                          context,
-                          grams / unit.grams,
-                          decimals: 1,
+    final weight = weightText(context, selected.grams, widget.unit);
+    final selectedLabel = '${fullDay(selected.day)}, $weight';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ChartSelection(
+          label: 'Selected weigh-in',
+          date: fullDay(selected.day),
+          value: weight,
+        ),
+        const SizedBox(height: Space.sm),
+        Semantics(
+          container: true,
+          button: true,
+          label: 'Weight trend. Use increase or decrease to select a weigh-in.',
+          value: selectedLabel,
+          increasedValue: selectedIndex < records.length - 1
+              ? '${fullDay(records[selectedIndex + 1].day)}, ${weightText(context, records[selectedIndex + 1].grams, widget.unit)}'
+              : null,
+          decreasedValue: selectedIndex > 0
+              ? '${fullDay(records[selectedIndex - 1].day)}, ${weightText(context, records[selectedIndex - 1].grams, widget.unit)}'
+              : null,
+          onIncrease: selectedIndex < records.length - 1
+              ? () => setState(
+                  () => _selectedDay = records[selectedIndex + 1].day,
+                )
+              : null,
+          onDecrease: selectedIndex > 0
+              ? () => setState(
+                  () => _selectedDay = records[selectedIndex - 1].day,
+                )
+              : null,
+          child: ExcludeSemantics(
+            child: SizedBox(
+              key: const ValueKey('weight-trend-plot'),
+              height: math.max(144, 65 * scale),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      for (final grams in [top, (top + bottom) / 2, bottom])
+                        Text(
+                          measurementText(
+                            context,
+                            grams / widget.unit.grams,
+                            decimals: 1,
+                          ),
+                          style: context.type.bodySmall,
                         ),
-                        style: context.type.bodySmall,
-                      ),
-                  ],
-                ),
-                const SizedBox(width: Space.sm),
-                Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8 * scale),
-                    child: CustomPaint(
-                      painter: _WeightLine(
-                        records: records,
-                        bottom: bottom,
-                        top: top,
-                        ink: context.colors.green,
-                        grid: context.colors.grid,
+                    ],
+                  ),
+                  const SizedBox(width: Space.sm),
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8 * scale),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTapUp: (details) {
+                            final index = _nearestWeightIndex(
+                              records,
+                              details.localPosition.dx,
+                              constraints.maxWidth,
+                            );
+                            setState(() => _selectedDay = records[index].day);
+                          },
+                          child: CustomPaint(
+                            key: const ValueKey('weight-trend-points'),
+                            painter: _WeightLine(
+                              records: records,
+                              selectedDay: selected.day,
+                              bottom: bottom,
+                              top: top,
+                              ink: context.colors.green,
+                              grid: context.colors.grid,
+                              background: context.colors.background,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: Space.xs),
-          Text(
-            records.length == 1
-                ? '${fullDay(records.first.day)} · ${unit.name}'
-                : '${fullDay(records.first.day)} to ${fullDay(records.last.day)} · ${unit.name}',
-            style: context.type.bodySmall,
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: Space.xs),
+        Text(
+          records.length == 1
+              ? 'Tap a point · ${fullDay(records.first.day)} · ${widget.unit.name}'
+              : 'Tap a point · ${fullDay(records.first.day)} to ${fullDay(records.last.day)} · ${widget.unit.name}',
+          style: context.type.bodySmall,
+        ),
+      ],
     );
   }
+}
+
+int _nearestWeightIndex(List<WeighIn> records, double x, double width) {
+  final first = records.first.day;
+  final span = records.last.day.daysSince(first);
+  final drawableWidth = math.max(0.0, width - 8);
+  var nearest = 0;
+  var distance = double.infinity;
+  for (final (index, record) in records.indexed) {
+    final pointX = span == 0
+        ? width / 2
+        : 4 + drawableWidth * record.day.daysSince(first) / span;
+    final candidate = (pointX - x).abs();
+    if (candidate < distance) {
+      nearest = index;
+      distance = candidate;
+    }
+  }
+  return nearest;
 }
 
 class _WeightLine extends CustomPainter {
   const _WeightLine({
     required this.records,
+    required this.selectedDay,
     required this.bottom,
     required this.top,
     required this.ink,
     required this.grid,
+    required this.background,
   });
 
   final List<WeighIn> records;
+  final CalendarDay selectedDay;
   final int bottom, top;
-  final Color ink, grid;
+  final Color ink, grid, background;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -232,6 +318,17 @@ class _WeightLine extends CustomPainter {
           size.height * (top - record.grams) / (top - bottom),
         ),
     ];
+    final selected = points[records.indexWhere((r) => r.day == selectedDay)];
+    final highlight = Paint()
+      ..color = grid
+      ..strokeWidth = 1;
+    for (var y = 0.0; y < size.height; y += 6) {
+      canvas.drawLine(
+        Offset(selected.dx, y),
+        Offset(selected.dx, math.min(y + 2.5, size.height)),
+        highlight,
+      );
+    }
     final line = Paint()
       ..color = ink
       ..style = PaintingStyle.stroke
@@ -243,6 +340,8 @@ class _WeightLine extends CustomPainter {
     for (final point in points) {
       canvas.drawCircle(point, points.length <= 30 ? 3 : 1.5, dot);
     }
+    canvas.drawCircle(selected, 7, Paint()..color = background);
+    canvas.drawCircle(selected, 4.5, dot);
   }
 
   @override
@@ -251,6 +350,8 @@ class _WeightLine extends CustomPainter {
       oldDelegate.bottom != bottom ||
       oldDelegate.top != top ||
       oldDelegate.ink != ink ||
+      oldDelegate.selectedDay != selectedDay ||
+      oldDelegate.background != background ||
       oldDelegate.grid != grid;
 }
 

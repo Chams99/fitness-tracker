@@ -701,12 +701,49 @@ Future<CalendarDay?> pickDay(
   return date == null ? null : CalendarDay.fromDate(date);
 }
 
+class ChartSelection extends StatelessWidget {
+  const ChartSelection({
+    required this.label,
+    required this.date,
+    required this.value,
+    super.key,
+  });
+
+  final String label, date, value;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    label: '$label: $date, $value',
+    child: ExcludeSemantics(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: context.type.bodySmall),
+          Text(
+            value,
+            style: context.type.headlineSmall?.copyWith(
+              color: context.colors.green,
+              fontFeatures: numeric,
+            ),
+          ),
+          Text(date, style: context.type.bodySmall),
+        ],
+      ),
+    ),
+  );
+}
+
 Future<T?> chooseOption<T extends Object>(
   BuildContext context,
   String title,
   List<({T value, String label, String? subtitle})> options, {
   T? selected,
+  String? description,
   Widget? Function(T value, String label)? leading,
+  String? footerText,
+  String? footerActionLabel,
+  VoidCallback? onFooterAction,
 }) => showModalBottomSheet<T>(
   useRootNavigator: true,
   context: context,
@@ -718,27 +755,79 @@ Future<T?> chooseOption<T extends Object>(
   ),
   builder: (context) => SafeArea(
     top: false,
-    child: ListView(
+    child: CustomScrollView(
       shrinkWrap: true,
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Text(title, style: context.type.titleLarge),
-        ),
-        for (final option in options)
-          Semantics(
-            selected: option.value == selected,
-            child: RowLink(
-              title: option.label,
-              subtitle: option.subtitle,
-              leading: leading?.call(option.value, option.label),
-              icon: option.value == selected
-                  ? LucideIcons.check
-                  : LucideIcons.chevronRight,
-              onTap: () => Navigator.pop(context, option.value),
-            ),
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+          sliver: SliverMainAxisGroup(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: Space.sm),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: context.type.titleLarge),
+                      if (description != null) ...[
+                        const SizedBox(height: Space.xs),
+                        Text(description, style: context.type.bodySmall),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              SliverList.builder(
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  final option = options[index];
+                  final isSelected = option.value == selected;
+                  return Semantics(
+                    selected: isSelected,
+                    child: RowLink(
+                      title: option.label,
+                      subtitle: option.subtitle,
+                      leading: leading?.call(option.value, option.label),
+                      icon: isSelected
+                          ? LucideIcons.check
+                          : LucideIcons.chevronRight,
+                      onTap: () => Navigator.pop(context, option.value),
+                    ),
+                  );
+                },
+              ),
+              if (footerText != null ||
+                  (footerActionLabel != null && onFooterAction != null))
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: Space.sm),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (footerText != null)
+                          Text(footerText, style: context.type.bodySmall),
+                        if (footerActionLabel != null &&
+                            onFooterAction != null) ...[
+                          const SizedBox(height: Space.sm),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                                onFooterAction();
+                              },
+                              icon: const Icon(LucideIcons.plus),
+                              label: Text(footerActionLabel),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+            ],
           ),
+        ),
       ],
     ),
   ),

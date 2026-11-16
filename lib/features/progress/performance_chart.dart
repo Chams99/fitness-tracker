@@ -42,12 +42,24 @@ class PerformanceChart extends StatefulWidget {
 class _PerformanceChartState extends State<PerformanceChart> {
   CalendarDay? _selected;
 
-  String _value(DailyResult day, {bool accessible = false}) => measure(
-    widget.metric.read(day),
-    widget.measurement,
-    widget.durationStyle,
-    accessible: accessible,
-  );
+  String _value(DailyResult day, {bool accessible = false}) {
+    final value = widget.metric.read(day);
+    if (widget.metric == ChartMetric.volume && widget.measurement.needsReps) {
+      return '${measure(value, widget.measurement, widget.durationStyle)} · ${day.totalReps ?? 0} reps';
+    }
+    final reps = switch (widget.metric) {
+      ChartMetric.latest => day.latestReps,
+      ChartMetric.best => day.bestReps,
+      ChartMetric.volume => null,
+    };
+    return measure(
+      value,
+      widget.measurement,
+      widget.durationStyle,
+      accessible: accessible,
+      reps: reps,
+    );
+  }
 
   Future<void> _list() async {
     final selected = await showModalBottomSheet<CalendarDay>(
@@ -120,34 +132,12 @@ class _PerformanceChartState extends State<PerformanceChart> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LayoutBuilder(
-          builder: (context, limits) => Row(
-            children: [
-              Expanded(
-                child: Semantics(
-                  liveRegion: true,
-                  label:
-                      '${fullDay(selected.day)}, ${metric.label.toLowerCase()}, ${_value(selected, accessible: true)}',
-                  child: ExcludeSemantics(
-                    child: Text(
-                      '${shortDay(selected.day)}  ·  ${_value(selected)}',
-                      style: context.type.labelMedium?.copyWith(
-                        color: context.colors.green,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: limits.maxWidth * .48),
-                child: TextButton(
-                  onPressed: _list,
-                  child: const Text('View values', textAlign: TextAlign.center),
-                ),
-              ),
-            ],
-          ),
+        ChartSelection(
+          label: metric.label,
+          date: fullDay(selected.day),
+          value: _value(selected, accessible: true),
         ),
+        const SizedBox(height: Space.sm),
         LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
@@ -188,6 +178,10 @@ class _PerformanceChartState extends State<PerformanceChart> {
               ),
             );
           },
+        ),
+        Align(
+          alignment: AlignmentDirectional.centerEnd,
+          child: QuietButton('View all values', _list),
         ),
       ],
     );
@@ -411,14 +405,33 @@ class _ChartPainter extends CustomPainter {
 }
 
 class Sparkline extends StatelessWidget {
-  const Sparkline(this.days, {super.key});
+  const Sparkline(this.days, {this.onTap, super.key});
   final List<DailyResult> days;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: CustomPaint(
-      painter: _SparkPainter(days, context.colors.green),
-      size: const Size(132, 30),
+  Widget build(BuildContext context) => Semantics(
+    button: onTap != null,
+    label: onTap == null ? null : 'Preview exercise graph',
+    child: ExcludeSemantics(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: SizedBox(
+            height: 42,
+            child: LayoutBuilder(
+              builder: (context, constraints) => Center(
+                child: CustomPaint(
+                  painter: _SparkPainter(days, context.colors.green),
+                  size: Size(constraints.maxWidth, 30),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     ),
   );
 }
@@ -430,7 +443,12 @@ class _SparkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (days.length < 2) return;
+    if (days.isEmpty) return;
+    final fill = Paint()..color = color;
+    if (days.length == 1) {
+      canvas.drawCircle(Offset(size.width / 2, size.height / 2), 2.5, fill);
+      return;
+    }
     final lo = days.map((d) => d.latest).reduce(math.min);
     final hi = days.map((d) => d.latest).reduce(math.max);
     final duration = days.last.day.daysSince(days.first.day);
@@ -451,7 +469,6 @@ class _SparkPainter extends CustomPainter {
         ..strokeWidth = 1.4
         ..style = PaintingStyle.stroke,
     );
-    final fill = Paint()..color = color;
     for (final p in points) {
       canvas.drawCircle(p, 2, fill);
     }
