@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -14,6 +12,7 @@ import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/ui.dart';
 import 'appearance_picker.dart';
 import 'measurement_input.dart';
+import 'profile_avatar.dart';
 
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
@@ -418,70 +417,4 @@ class _AboutFooter extends ConsumerWidget {
       ),
     );
   }
-}
-
-class ProfileAvatar extends StatelessWidget {
-  const ProfileAvatar({
-    required this.photo,
-    required this.preset,
-    this.size = 74,
-    super.key,
-  });
-
-  final Uint8List? photo;
-  final AvatarPreset preset;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final silhouette = ColoredBox(
-      color: context.colors.add,
-      child: Center(
-        child: Icon(
-          Icons.person,
-          size: size * .82,
-          color: TrackerColors.light.ink,
-        ),
-      ),
-    );
-    final presetImage = preset == AvatarPreset.anonymous
-        ? silhouette
-        : _resolvedImage(
-            AssetImage('assets/avatars/${preset.name}.webp'),
-            silhouette,
-          );
-    return ExcludeSemantics(
-      child: ClipOval(
-        child: SizedBox.square(
-          dimension: size,
-          child: photo == null
-              ? presetImage
-              : _resolvedImage(MemoryImage(photo!), presetImage),
-        ),
-      ),
-    );
-  }
-
-  Widget _resolvedImage(ImageProvider image, Widget waiting) => Image(
-    image: image,
-    fit: BoxFit.cover,
-    frameBuilder: (context, child, frame, synchronous) {
-      if (synchronous || MediaQuery.disableAnimationsOf(context)) {
-        return frame == null ? waiting : child;
-      }
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          waiting,
-          AnimatedOpacity(
-            opacity: frame == null ? 0 : 1,
-            duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOut,
-            child: child,
-          ),
-        ],
-      );
-    },
-    errorBuilder: (_, _, _) => waiting,
-  );
 }

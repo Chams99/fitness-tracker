@@ -62,7 +62,7 @@ Use an 8-unit spacing rhythm, with 4-unit adjustments for closely related text.
 
 Use 20–24 units of horizontal screen padding, reducing to 16 only when a compact width requires it. Align headings, chart edges, and list content to the same grid. Keep related labels closer to their values than to the next section.
 
-Most content has no container background. Small inputs can have 8–12 unit corners; main action buttons can use 12–16. Reserve fully rounded shapes for the specified navigation capsule, its selected tab, and the circular Add button. A single subtle shadow may separate floating navigation from content; ordinary rows and charts do not need shadows.
+Most content has no container background. Small inputs can have 8–12 unit corners; main action buttons can use 12–16. Reserve fully rounded shapes for the navigation capsule, its selected tab, and the circular Add and Profile buttons. A single subtle shadow may separate floating navigation from content; ordinary rows and charts do not need shadows.
 
 ## Navigation
 
@@ -74,6 +74,8 @@ The bottom navigation consists of two physically separate elements:
 2. A separate circular light green button containing a centered dark plus sign. It opens activity logging.
 
 Start with a 56-unit height, a 12-unit gap, and approximately 20-unit outer margins. Place both elements above the bottom safe area. Add content padding so the final row can scroll clear of them. Preserve the two-element composition on narrow screens and with larger text; do not replace it with a conventional full-width tab bar.
+
+Overview places the Profile button beside the page heading. Show the saved avatar in a 48-unit circular button with a neutral border. Keep the Profile label for assistive technology and use the person icon while an avatar loads or when no avatar is set.
 
 Secondary pages use platform navigation. Add entry uses a sheet with a Back action between steps, including exercise creation. The sheet closes on a downward drag or outside tap and asks before discarding a draft. Focused forms have one clear save action.
 

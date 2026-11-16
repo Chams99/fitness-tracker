@@ -8,6 +8,7 @@ import 'package:fitness_tracker/core/database/tracker_repository.dart';
 import 'package:fitness_tracker/core/platform/device_services.dart';
 import 'package:fitness_tracker/features/data_transfer/transfer_codec.dart'
     show activityExample, activityKey;
+import 'package:fitness_tracker/features/profile/profile_avatar.dart';
 import 'package:fitness_tracker/features/profile/profile_page.dart';
 import 'package:fitness_tracker/features/progress/performance_chart.dart'
     show PerformanceChart, Sparkline;
@@ -16,6 +17,7 @@ import 'package:fitness_tracker/features/progress/progress_page.dart'
 import 'package:fitness_tracker/main.dart';
 import 'package:fitness_tracker/shared/domain/body_metrics.dart';
 import 'package:fitness_tracker/shared/domain/training.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -1239,6 +1241,56 @@ void main() {
   }
 
   testWidgets(
+    'Overview keeps the Profile button in place as the saved avatar changes',
+    (tester) async {
+      final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
+      try {
+        final asset = await tester.runAsync(
+          () => rootBundle.load('assets/brand/mark.png'),
+        );
+        final photo = asset!.buffer.asUint8List(
+          asset.offsetInBytes,
+          asset.lengthInBytes,
+        );
+        await _pumpApp(tester, repo);
+        final button = find.byTooltip('Profile').hitTestable();
+        final avatar = find.descendant(
+          of: button,
+          matching: find.byType(ProfileAvatar),
+        );
+        final bounds = tester.getRect(button);
+        expect(bounds.size, const Size.square(48));
+        expect(
+          tester.widget<ProfileAvatar>(avatar).preset,
+          AvatarPreset.anonymous,
+        );
+
+        await repo.saveProfileAvatar(AvatarPreset.strength);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ProfileAvatar>(avatar).preset,
+          AvatarPreset.strength,
+        );
+        expect(tester.getRect(button), bounds);
+
+        await repo.saveProfilePhoto(photo);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ProfileAvatar>(avatar).photo,
+          orderedEquals(photo),
+        );
+        expect(tester.getRect(button), bounds);
+
+        await tester.tapAt(Offset(bounds.right - 2, bounds.center.dy));
+        await tester.pumpAndSettle();
+        expect(visibleText('Edit profile'), findsOneWidget);
+      } finally {
+        await clean(tester, repo);
+      }
+    },
+  );
+
+  testWidgets(
     'Profile keeps actions and preferences in place while profile and weight load',
     (tester) async {
       final repo = TrackerRepository(
@@ -1276,11 +1328,15 @@ void main() {
         await tester.pump(const Duration(milliseconds: 500));
         final preferences = find.text('Preferences');
         final logWeight = visibleText('Log weight');
+        final avatar = find.descendant(
+          of: find.byType(ProfilePage),
+          matching: find.byType(ProfileAvatar),
+        );
         final preferencesPosition = tester.getTopLeft(preferences);
         final actionPosition = tester.getTopLeft(logWeight);
         expect(startedWeightRead, isTrue);
         expect(find.text('No weigh-ins yet'), findsNothing);
-        expect(find.byType(ProfileAvatar), findsNothing);
+        expect(avatar, findsNothing);
 
         profile.complete(
           const LocalProfile(
@@ -1291,7 +1347,7 @@ void main() {
         );
         await tester.idle();
         await tester.pump();
-        expect(find.byType(ProfileAvatar), findsOneWidget);
+        expect(avatar, findsOneWidget);
         expect(find.bySemanticsLabel('Loading profile'), findsNothing);
         expect(
           find.bySemanticsLabel(RegExp('Loading Body weight')),

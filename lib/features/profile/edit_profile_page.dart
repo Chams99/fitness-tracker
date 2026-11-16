@@ -8,7 +8,7 @@ import '../../shared/domain/body_metrics.dart';
 import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/ui.dart';
 import 'measurement_input.dart';
-import 'profile_page.dart';
+import 'profile_avatar.dart';
 
 class EditProfilePage extends ConsumerWidget {
   const EditProfilePage({super.key});

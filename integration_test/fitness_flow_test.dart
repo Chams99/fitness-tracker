@@ -7,7 +7,8 @@ import 'package:fitness_tracker/core/database/database.dart'
 import 'package:fitness_tracker/core/database/tracker_repository.dart';
 import 'package:fitness_tracker/core/platform/device_services.dart';
 import 'package:fitness_tracker/features/data_transfer/transfer_codec.dart';
-import 'package:fitness_tracker/features/profile/profile_page.dart';
+import 'package:fitness_tracker/features/profile/edit_profile_page.dart';
+import 'package:fitness_tracker/features/profile/profile_avatar.dart';
 import 'package:fitness_tracker/main.dart';
 import 'package:fitness_tracker/shared/domain/body_metrics.dart';
 import 'package:fitness_tracker/shared/domain/training.dart';
@@ -389,7 +390,10 @@ void main() {
         await _tooltip(tester, 'Profile');
         expect(_visible('You'), findsOneWidget);
         await _tap(tester, 'Edit profile');
-        final avatar = find.byType(ProfileAvatar);
+        final avatar = find.descendant(
+          of: find.byType(EditProfilePage),
+          matching: find.byType(ProfileAvatar),
+        );
         final changeAvatar = _visible('Change avatar');
         expect(
           tester.getCenter(avatar).dx,

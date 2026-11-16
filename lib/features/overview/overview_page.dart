@@ -6,11 +6,13 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../core/database/tracker_repository.dart';
+import '../../shared/domain/body_metrics.dart';
 import '../../shared/domain/training.dart';
 import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 import '../history/entry_row.dart';
 import '../logging/log_page.dart';
+import '../profile/profile_avatar.dart';
 import '../progress/performance_chart.dart';
 
 class OverviewPage extends ConsumerWidget {
@@ -39,11 +41,7 @@ class OverviewPage extends ConsumerWidget {
               ? null
               : '$exerciseCount ${exerciseCount == 1 ? 'exercise' : 'exercises'} · '
                     'Since ${fullDay(overview!.firstDay!)}',
-          action: RoundControl(
-            LucideIcons.userRound,
-            'Profile',
-            () => context.push('/profile'),
-          ),
+          action: const _ProfileButton(),
         ),
         AsyncPanel(
           content,
@@ -132,6 +130,34 @@ class OverviewPage extends ConsumerWidget {
           },
         ),
       ],
+    );
+  }
+}
+
+class _ProfileButton extends ConsumerWidget {
+  const _ProfileButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(profileProvider).value;
+    final colors = context.colors;
+    return IconButton(
+      tooltip: 'Profile',
+      onPressed: () => context.push('/profile'),
+      style: IconButton.styleFrom(
+        backgroundColor: colors.input,
+        foregroundColor: colors.ink,
+        side: BorderSide(color: colors.border),
+        shape: const CircleBorder(),
+        padding: EdgeInsets.zero,
+        fixedSize: const Size.square(Space.target),
+      ),
+      icon: ProfileAvatar(
+        size: 38,
+        photo: profile?.photo,
+        preset: profile?.avatarPreset ?? AvatarPreset.anonymous,
+        fallback: const Center(child: Icon(LucideIcons.userRound, size: 21)),
+      ),
     );
   }
 }
