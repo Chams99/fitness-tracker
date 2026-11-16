@@ -115,6 +115,15 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
       search: '',
     ));
     final style = ref.watch(durationProvider);
+    final goalData = exercise != null && !exercise.archived
+        ? ref.watch(goal)
+        : null;
+    final lifetime = exercise != null && !exercise.archived
+        ? ref.watch(all)
+        : null;
+    final records = exercise != null && !exercise.archived
+        ? ref.watch(entries)
+        : null;
 
     return Scaffold(
       appBar: secondaryBar(
@@ -161,6 +170,8 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
         children: [
           AsyncPanel(
             catalog,
+            loadingLabel: 'Loading exercise',
+            loading: const PerformanceSkeleton(),
             retry: () => ref.invalidate(catalogProvider),
             builder: (_) {
               if (exercise == null) {
@@ -187,6 +198,9 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
                     PerformanceView(
                       exercise: exercise,
                       range: selectionBounds(_range, today),
+                      onResetRange: _range == allTime
+                          ? null
+                          : () => setState(() => _range = allTime),
                       rangeAction: FilterButton(_range.preset.label, () async {
                         final selected = await selectRange(
                           context,
@@ -201,10 +215,14 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
                     const SizedBox(height: 16),
                     const Divider(),
                     AsyncPanel(
-                      ref.watch(goal),
+                      goalData!,
+                      loadingLabel: 'Loading goal',
+                      loading: const SkeletonRows(count: 1),
                       retry: () => ref.invalidate(goal),
                       builder: (g) => AsyncPanel(
-                        ref.watch(all),
+                        lifetime!,
+                        loadingLabel: 'Loading goal progress',
+                        loading: const SkeletonRows(count: 1),
                         retry: () => ref.invalidate(all),
                         builder: (data) => GoalSummary(
                           exercise: exercise,
@@ -220,7 +238,9 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
                     const SizedBox(height: 14),
                     SectionTitle('Recorded activity', key: _entryHeading),
                     AsyncPanel(
-                      ref.watch(entries),
+                      records!,
+                      loadingLabel: 'Loading recorded activity',
+                      loading: const SkeletonRows(count: 2, rowHeight: 75),
                       retry: () => ref.invalidate(entries),
                       builder: (records) => Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -269,6 +289,9 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
                 width: 1100,
                 label: exercise.archived ? 'Restore exercise' : 'Add entry',
                 busy: _busy,
+                busyLabel: exercise.archived
+                    ? 'Restoring…'
+                    : 'Updating exercise…',
                 onPressed: exercise.archived
                     ? () => _archive(exercise)
                     : () => showLogSheet(

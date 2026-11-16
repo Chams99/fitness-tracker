@@ -143,7 +143,7 @@ class _YourDataPageState extends ConsumerState<YourDataPage> {
           'Your records are stored on this device.',
           style: context.type.bodyMedium,
         ),
-        if (_busy) const LinearProgressIndicator(minHeight: 2),
+        ActionProgressLine(busy: _busy, label: 'Working with your records'),
         FormProblem(_problem),
         const SizedBox(height: Space.xl),
         const SectionTitle('Backup and restore'),

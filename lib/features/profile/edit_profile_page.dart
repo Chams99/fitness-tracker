@@ -22,6 +22,15 @@ class EditProfilePage extends ConsumerWidget {
       children: [
         AsyncPanel(
           result,
+          loadingLabel: 'Loading profile',
+          loading: const Column(
+            children: [
+              SizedBox(height: Space.lg),
+              Skeleton(width: 74, height: 74, circular: true),
+              SizedBox(height: Space.xl),
+              SkeletonRows(rowHeight: 56),
+            ],
+          ),
           retry: () => ref.invalidate(profileProvider),
           builder: (_) => const SizedBox.shrink(),
         ),
@@ -292,7 +301,12 @@ class _ProfileEditorState extends ConsumerState<_ProfileEditor> {
                 QuietButton('Change avatar', choosing ? null : _changeAvatar),
               ],
             ),
-            if (_photoBusy) const LinearProgressIndicator(minHeight: 2),
+            ActionProgressLine(
+              busy: _photoBusy || recovery.isLoading,
+              label: _photoBusy
+                  ? 'Loading avatar photo'
+                  : 'Checking for an avatar photo',
+            ),
             FormProblem(
               _photoProblem ??
                   (recovery.hasError

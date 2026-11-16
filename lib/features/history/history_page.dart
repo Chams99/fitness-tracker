@@ -36,6 +36,12 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
 
   final _queryController = TextEditingController();
 
+  void _clearSearch() => setState(() {
+    _queryController.clear();
+    _query = '';
+    _page = 0;
+  });
+
   @override
   void dispose() {
     _queryController.dispose();
@@ -93,6 +99,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       exercise: _exercise,
     );
     final days = calendarProvider(filters);
+    final activityDates = ref.watch(days);
     final entries = entriesProvider((
       exercise: _exercise,
       day: _allActivity ? null : _selected,
@@ -100,6 +107,18 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
       offset: _page * _pageSize,
       search: _query,
     ));
+    final catalog = ref.watch(catalogProvider);
+    final active = (catalog.value ?? []).where(
+      (item) => !item.exercise.archived,
+    );
+    final byId = {for (final item in active) item.exercise.id: item.exercise};
+    final selectedExercise = byId[_exercise];
+    final records = ref.watch(entries);
+    final rows = catalog.hasValue
+        ? records
+        : catalog.hasError
+        ? AsyncError<List<Entry>>(catalog.error!, catalog.stackTrace!)
+        : const AsyncLoading<List<Entry>>();
     return ScreenScroll(
       primary: true,
       width: 1100,
@@ -134,168 +153,157 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
               }),
             ),
           ),
-        AsyncPanel(
-          ref.watch(catalogProvider),
-          retry: () => ref.invalidate(catalogProvider),
-          builder: (catalog) {
-            final active = catalog.where((item) => !item.exercise.archived);
-            final byId = {
-              for (final item in active) item.exercise.id: item.exercise,
-            };
-            final selectedExercise = byId[_exercise];
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                FilterButton(
-                  selectedExercise?.name ?? 'All exercises',
-                  () async {
-                    final filter = await chooseOption<String>(
-                      context,
-                      'Filter by exercise',
-                      [
-                        (value: '', label: 'All exercises', subtitle: null),
-                        for (final item in active)
-                          (
-                            value: item.exercise.id,
-                            label: item.exercise.name,
-                            subtitle: item.exercise.measurement.label,
-                          ),
-                      ],
-                      selected: _exercise ?? '',
-                      leading: (id, name) =>
-                          id.isEmpty ? null : ExerciseIcon(name),
-                    );
-                    if (mounted && filter != null) {
-                      setState(() {
-                        _exercise = filter.isEmpty ? null : filter;
-                        _page = 0;
-                      });
-                    }
-                  },
-                  leading: selectedExercise == null
-                      ? null
-                      : ExerciseIcon(selectedExercise.name),
-                ),
-                const SizedBox(height: Space.xs),
-                ResponsiveSplit(
-                  stackGap: Space.sm,
-                  main: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _Calendar(
-                        month: _month,
-                        today: today,
-                        selected: _selected,
-                        marked: ref.watch(days).value ?? const {},
-                        onChoose: () => _jump(today),
-                        onSelected: _select,
-                        onPrevious: _month.year == 1900 && _month.month == 1
-                            ? null
-                            : () => _changeMonth(
-                                DateTime(_month.year, _month.month - 1),
-                              ),
-                        onNext:
-                            DateTime(
-                              _month.year,
-                              _month.month + 1,
-                            ).isAfter(today.local)
-                            ? null
-                            : () => _changeMonth(
-                                DateTime(_month.year, _month.month + 1),
-                              ),
-                      ),
-                      if (ref.watch(days).hasError)
-                        QuietButton(
-                          'Reload activity dates',
-                          () => ref.invalidate(days),
+        FilterButton(
+          selectedExercise?.name ?? 'All exercises',
+          !catalog.hasValue
+              ? null
+              : () async {
+                  final filter = await chooseOption<String>(
+                    context,
+                    'Filter by exercise',
+                    [
+                      (value: '', label: 'All exercises', subtitle: null),
+                      for (final item in active)
+                        (
+                          value: item.exercise.id,
+                          label: item.exercise.name,
+                          subtitle: item.exercise.measurement.label,
                         ),
-                      const SizedBox(height: Space.sm),
-                      const Divider(),
                     ],
+                    selected: _exercise ?? '',
+                    leading: (id, name) =>
+                        id.isEmpty ? null : ExerciseIcon(name),
+                  );
+                  if (mounted && filter != null) {
+                    setState(() {
+                      _exercise = filter.isEmpty ? null : filter;
+                      _page = 0;
+                    });
+                  }
+                },
+          leading: selectedExercise == null
+              ? null
+              : ExerciseIcon(selectedExercise.name),
+        ),
+        const SizedBox(height: Space.xs),
+        ResponsiveSplit(
+          stackGap: Space.sm,
+          main: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _Calendar(
+                month: _month,
+                today: today,
+                selected: _selected,
+                marked: activityDates.value ?? const {},
+                loading: !activityDates.hasValue && !activityDates.hasError,
+                onChoose: () => _jump(today),
+                onSelected: _select,
+                onPrevious: _month.year == 1900 && _month.month == 1
+                    ? null
+                    : () =>
+                          _changeMonth(DateTime(_month.year, _month.month - 1)),
+                onNext:
+                    DateTime(_month.year, _month.month + 1).isAfter(today.local)
+                    ? null
+                    : () =>
+                          _changeMonth(DateTime(_month.year, _month.month + 1)),
+              ),
+              if (!activityDates.hasValue && activityDates.hasError)
+                QuietButton(
+                  'Reload activity dates',
+                  () => ref.invalidate(days),
+                ),
+              const SizedBox(height: Space.sm),
+              const Divider(),
+            ],
+          ),
+          side: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SectionTitle(
+                key: _entryHeading,
+                _allActivity ? 'All activity' : weekday(_selected),
+                action: QuietButton(
+                  'Add',
+                  () => showLogSheet(
+                    context,
+                    request: LogRequest(
+                      day: _allActivity ? today : _selected,
+                      exercise: selectedExercise,
+                    ),
                   ),
-                  side: Column(
+                  icon: LucideIcons.plus,
+                ),
+              ),
+              QuietButton(
+                _allActivity ? 'Show selected day' : 'Show all activity',
+                () => setState(() {
+                  _allActivity = !_allActivity;
+                  _page = 0;
+                }),
+                icon: _allActivity
+                    ? LucideIcons.calendarDays
+                    : LucideIcons.list,
+              ),
+              AsyncPanel(
+                rows,
+                loadingLabel: 'Loading activity',
+                loading: const SkeletonRows(count: 2, rowHeight: 75),
+                retry: () => catalog.hasError
+                    ? ref.invalidate(catalogProvider)
+                    : ref.invalidate(entries),
+                builder: (items) {
+                  final filtered = items
+                      .where((entry) => byId.containsKey(entry.exerciseId))
+                      .toList();
+                  return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SectionTitle(
-                        key: _entryHeading,
-                        _allActivity ? 'All activity' : weekday(_selected),
-                        action: QuietButton(
-                          'Add',
-                          () => showLogSheet(
-                            context,
-                            request: LogRequest(
-                              day: _allActivity ? today : _selected,
-                              exercise: selectedExercise,
+                      if (filtered.isEmpty)
+                        EmptyBlock(
+                          title: _query.isNotEmpty
+                              ? 'No matches'
+                              : _allActivity
+                              ? 'No recorded activity'
+                              : 'No entries on this day',
+                          message: _query.isNotEmpty
+                              ? 'Try a different exercise name or clear your search.'
+                              : _allActivity
+                              ? 'Your recorded sets will appear here.'
+                              : 'Use Add to log a result for ${shortDay(_selected)}, or choose another day.',
+                          secondary: _query.isEmpty
+                              ? null
+                              : QuietButton('Clear search', _clearSearch),
+                        ),
+                      for (final entry in filtered.take(_pageSize))
+                        EntryRow(
+                          key: ValueKey(entry.id),
+                          entry: entry,
+                          exercise: byId[entry.exerciseId]!,
+                          showDate: _allActivity,
+                        ),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          if (_page > 0)
+                            QuietButton(
+                              'Newer entries',
+                              () => _goToPage(_page - 1),
                             ),
-                          ),
-                          icon: LucideIcons.plus,
-                        ),
-                      ),
-                      AsyncPanel(
-                        ref.watch(entries),
-                        retry: () => ref.invalidate(entries),
-                        builder: (items) {
-                          final filtered = items
-                              .where(
-                                (entry) => byId.containsKey(entry.exerciseId),
-                              )
-                              .toList();
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (filtered.isEmpty)
-                                EmptyBlock(
-                                  title: _query.isEmpty
-                                      ? 'No entries here'
-                                      : 'No matches',
-                                  message: _allActivity
-                                      ? 'Your recorded sets will appear here.'
-                                      : 'Pick another day or add a result for ${shortDay(_selected)}.',
-                                ),
-                              for (final entry in filtered.take(_pageSize))
-                                EntryRow(
-                                  key: ValueKey(entry.id),
-                                  entry: entry,
-                                  exercise: byId[entry.exerciseId]!,
-                                  showDate: _allActivity,
-                                ),
-                              Wrap(
-                                spacing: 8,
-                                children: [
-                                  if (_page > 0)
-                                    QuietButton(
-                                      'Newer entries',
-                                      () => _goToPage(_page - 1),
-                                    ),
-                                  if (filtered.length > _pageSize)
-                                    QuietButton(
-                                      'Older entries',
-                                      () => _goToPage(_page + 1),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                      QuietButton(
-                        _allActivity
-                            ? 'Show selected day'
-                            : 'Show all activity',
-                        () => setState(() {
-                          _allActivity = !_allActivity;
-                          _page = 0;
-                        }),
-                        icon: _allActivity
-                            ? LucideIcons.calendarDays
-                            : LucideIcons.list,
+                          if (filtered.length > _pageSize)
+                            QuietButton(
+                              'Older entries',
+                              () => _goToPage(_page + 1),
+                            ),
+                        ],
                       ),
                     ],
-                  ),
-                ),
-              ],
-            );
-          },
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -308,6 +316,7 @@ class _Calendar extends StatelessWidget {
     required this.today,
     required this.selected,
     required this.marked,
+    required this.loading,
     required this.onSelected,
     required this.onChoose,
     required this.onPrevious,
@@ -316,6 +325,7 @@ class _Calendar extends StatelessWidget {
   final DateTime month;
   final CalendarDay today, selected;
   final Set<CalendarDay> marked;
+  final bool loading;
   final ValueChanged<CalendarDay> onSelected;
   final VoidCallback onChoose;
   final VoidCallback? onPrevious, onNext;
@@ -355,6 +365,18 @@ class _Calendar extends StatelessWidget {
             RoundControl(LucideIcons.chevronLeft, 'Previous month', onPrevious),
             RoundControl(LucideIcons.chevronRight, 'Next month', onNext),
           ],
+        ),
+        SizedBox(
+          height: 2,
+          width: double.infinity,
+          child: SkeletonCrossfade(
+            loadingLabel: 'Loading activity dates',
+            placeholder: const Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Skeleton(width: 72, height: 2),
+            ),
+            child: loading ? null : const SizedBox.expand(),
+          ),
         ),
         Row(
           children: [
@@ -444,17 +466,25 @@ class _Calendar extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (hasEntries)
+                      if (loading || hasEntries)
                         Positioned(
                           bottom: 3,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: active
-                                  ? context.colors.onPill
-                                  : context.colors.green,
+                          child: SizedBox.square(
+                            dimension: 4,
+                            child: SkeletonCrossfade(
+                              key: ValueKey(day),
+                              placeholder: const SizedBox.shrink(),
+                              child: !hasEntries
+                                  ? null
+                                  : DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: active
+                                            ? context.colors.onPill
+                                            : context.colors.green,
+                                      ),
+                                    ),
                             ),
-                            child: const SizedBox.square(dimension: 4),
                           ),
                         ),
                     ],

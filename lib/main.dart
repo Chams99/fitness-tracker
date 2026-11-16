@@ -112,13 +112,20 @@ class _FitnessAppState extends ConsumerState<FitnessApp> {
             : Scaffold(
                 body: Center(
                   child: Semantics(
-                    label: 'Opening your records',
-                    child: Image.asset(
-                      Branding.mark,
-                      width: 78,
-                      height: 78,
-                      color: context.colors.ink,
-                      excludeFromSemantics: true,
+                    liveRegion: true,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          Branding.mark,
+                          width: 78,
+                          height: 78,
+                          color: context.colors.ink,
+                          excludeFromSemantics: true,
+                        ),
+                        const SizedBox(height: Space.md),
+                        const Text('Opening your records…'),
+                      ],
                     ),
                   ),
                 ),

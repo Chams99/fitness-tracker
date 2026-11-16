@@ -67,6 +67,8 @@ class _ExercisePicker extends ConsumerWidget {
             final query = normalizeName(input.text);
             return AsyncPanel(
               catalog,
+              loadingLabel: 'Loading exercises',
+              loading: const SkeletonRows(),
               retry: () => ref.invalidate(catalogProvider),
               builder: (list) {
                 final matches = list
@@ -115,6 +117,9 @@ class _ExercisePicker extends ConsumerWidget {
                         message: query.isNotEmpty
                             ? 'Try another name or create an exercise.'
                             : 'Create an exercise for the result you want to log.',
+                        secondary: query.isEmpty
+                            ? null
+                            : QuietButton('Clear search', search.clear),
                       ),
                     if (used.isNotEmpty && query.isEmpty)
                       rows('Recently used', used),

@@ -22,6 +22,8 @@ flutter test
 
 Use `flutter test --coverage` to write the coverage report to `coverage/lcov.info`. The host suite covers domain rules, SQLite and migrations, imports and exports, and widget behavior.
 
+For changes to loading UI, use provider overrides or a test repository to hold reads pending. Inspect the first pending frame and the first frame after releasing the read before settling animations. Confirm that both frames show content or a placeholder and nearby controls keep their position. Check the first empty result, a failed read with retry, and a changed filter or page with existing data. Include a compact viewport, larger text, and Reduce Motion where the layout or animation changes.
+
 ## Run device checks when needed
 
 Use `flutter devices` to find a target. Choose an Android emulator or connected Android device on Windows, macOS, or Linux. On macOS with Xcode, you can also choose an iOS simulator or connected iOS device. Use a disposable test target: Flutter may replace or remove the app during an integration run.

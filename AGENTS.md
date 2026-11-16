@@ -1,6 +1,7 @@
 # Working in Fitness Tracker
 
 - Read the [docs index](docs/README.md) for setup and project references. For app UI changes, use [PRODUCT.md](PRODUCT.md) and [DESIGN.md](DESIGN.md).
+- For data-backed UI, follow the [loading, refresh, and empty state rules](DESIGN.md#loading-and-refresh). Verify that controls stay in place while reads are pending and that empty or failed reads offer the right next action.
 - Keep workout data local. Test with fictional records. When changing storage, follow the [migration steps](docs/development.md#change-the-database-schema) and check the [data formats](docs/data-formats.md).
 - Run the relevant [host checks](docs/testing.md#run-host-checks) without waiting for a device choice. If a change needs a device and the user has not specified a target, ask which platform and emulator, simulator, or device to use. Continue work that does not depend on the answer.
 - If `.local/testing.md` exists, read it for the user's saved device preferences. A current instruction takes precedence. Use [the example](docs/local-testing.example.md) when the user asks to save a choice. Keep machine paths, device IDs, and personal notes out of tracked files.

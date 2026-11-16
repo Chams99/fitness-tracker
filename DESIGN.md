@@ -139,7 +139,25 @@ Use **Latest set** and **Best set** as two views of the same performance chart. 
 
 Use immediate visual press feedback and restrained native transitions. A short 150–220 ms transition is a starting point for changing views. Respect reduced-motion settings. Haptic feedback can confirm a saved entry, but should not accompany every field tap.
 
-Use honest empty, loading, and error states. Empty history should say there are no records for that date or range and offer an appropriate action. A save failure retains the draft and offers Retry. Do not display sample values in a real empty account.
+### Loading and refresh
+
+Render headings, navigation, filters, and actions as soon as they are available. Start independent reads together. Reserve space for pending values inside the layout that will display them, including at larger text sizes. Paint quiet static skeletons from the first pending frame. Shape them like the expected rows, chart, avatar, or illustration. When content arrives, show it on the first resolved frame and fade out the skeleton as the content fades in over 180 ms. Use `AsyncPanel` for provider-backed regions and `SkeletonCrossfade` for individual fields or images. Show available data immediately and skip the animation when Reduce Motion is enabled.
+
+Keep valid content and the scroll position during refresh and pagination. When the selected date, exercise, or range changes, replace the affected results in place with a placeholder for that query. Keep the controls available and only show values that match the selected query. Skeletons are decorative. Give each pending region a short accessible label.
+
+If the first view needs several reads, keep one placeholder until its content is ready. On Progress, reveal the exercise and date filters with the first result, then keep the filters visible for later reads. Reveal the default avatar with the profile and keep a visible fallback while other avatar images decode.
+
+Use inline progress for actions such as saving or importing. Keep the control in place, give it a status label such as “Saving…”, and prevent duplicate submission. Use a static indicator when Reduce Motion is enabled. Preserve the draft on failure and offer a retry close to the affected content.
+
+Use the native splash for app startup. Show “Opening your records…” if the app is still opening local storage when the native splash hands off.
+
+### Empty states
+
+Show first-use guidance only after the app confirms there are no records. Explain what will appear and give people one clear next action, such as logging their first result. Overview pairs that action with a dedicated workout illustration in the app’s palette. Keep it decorative and compact so the action stays visible on a small screen. Offer backup import as a secondary action on Overview. Leave personal details and weigh-ins optional.
+
+Align the first-use blocks on Overview and Progress to the same page margin. Progress can sit lower under its heading. Its notebook illustration shows blank graph paper so it cannot be mistaken for recorded activity.
+
+Use compact, contextual messages for an empty day, a date range without activity, or a search with no matches. Offer a relevant action such as adding to the selected day, widening the range, or clearing the search. Keep empty, loading, and error states distinct and show only actual recorded values.
 
 Support screen readers, logical focus order, increased text sizes, and clear focus indicators. State selected tabs and dates programmatically. Never rely on color alone to distinguish selection, progress, or errors.
 

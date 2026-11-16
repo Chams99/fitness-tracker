@@ -747,6 +747,10 @@ class _TransferPageState extends ConsumerState<TransferPage> {
         (!widget.activity ||
             (_activityPlan != null &&
                 (!_activityPlan!.repeated || _allowRepeat)));
+    final promptCatalog = widget.activity && _includeCatalog
+        ? ref.watch(catalogProvider)
+        : null;
+    final waitingForNames = promptCatalog != null && !promptCatalog.hasValue;
 
     return ProtectDraft<void>(
       dirty: false,
@@ -773,7 +777,13 @@ class _TransferPageState extends ConsumerState<TransferPage> {
                 value: _includeCatalog,
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Include exercise names in prompt'),
-                subtitle: const Text('Shares names and units only.'),
+                subtitle: Text(
+                  waitingForNames
+                      ? (promptCatalog.hasError
+                            ? 'Couldn’t load exercise names.'
+                            : 'Loading exercise names…')
+                      : 'Shares names and units only.',
+                ),
                 onChanged: _busy
                     ? null
                     : (value) =>
@@ -784,17 +794,15 @@ class _TransferPageState extends ConsumerState<TransferPage> {
                 runSpacing: 8,
                 children: [
                   OutlinedButton(
-                    onPressed: _busy
+                    onPressed: _busy || waitingForNames
                         ? null
                         : () => _copy(
                             aiPrompt(
                               ref.read(nowProvider)(),
-                              catalog: _includeCatalog
-                                  ? (ref.read(catalogProvider).value ?? [])
-                                        .where((r) => !r.exercise.archived)
-                                        .map((r) => r.exercise)
-                                        .toList()
-                                  : const [],
+                              catalog: (promptCatalog?.value ?? [])
+                                  .where((r) => !r.exercise.archived)
+                                  .map((r) => r.exercise)
+                                  .toList(),
                             ),
                             'Prompt',
                           ),
@@ -804,6 +812,11 @@ class _TransferPageState extends ConsumerState<TransferPage> {
                     'View example',
                     _busy ? null : () => _example(today),
                   ),
+                  if (waitingForNames && promptCatalog.hasError)
+                    QuietButton(
+                      'Retry exercise names',
+                      _busy ? null : () => ref.invalidate(catalogProvider),
+                    ),
                 ],
               ),
               if (_copyMessage != null)
@@ -867,6 +880,7 @@ class _TransferPageState extends ConsumerState<TransferPage> {
                       : 'Restore backup')
                 : 'Validate and preview',
             busy: _busy,
+            busyLabel: preview ? 'Importing…' : 'Checking file…',
             onPressed: preview ? (canImport ? _apply : null) : _validatePaste,
             secondary: preview && (_text.text.isNotEmpty || _fileText != null)
                 ? QuietButton('Validate again', _busy ? null : _validatePaste)
