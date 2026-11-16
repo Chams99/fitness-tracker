@@ -7,6 +7,7 @@ import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
 import '../../shared/widgets/draft_sheet.dart';
 import '../../shared/widgets/exercise_icon.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/ui.dart';
 import '../exercises/exercise_library.dart';
 

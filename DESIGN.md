@@ -77,6 +77,8 @@ Start with a 56-unit height, a 12-unit gap, and approximately 20-unit outer marg
 
 Secondary pages use platform navigation. Add entry uses a sheet with a Back action between steps, including exercise creation. The sheet closes on a downward drag or outside tap and asks before discarding a draft. Focused forms have one clear save action.
 
+Full-screen secondary pages use a large heading that gives way to a compact toolbar title as it scrolls offscreen. Back and toolbar actions stay pinned. On Profile, place the compact title and avatar beside Back. Fade the title in as the large heading leaves view, and let the avatar finish shrinking into place as scrolling continues. Let short pages fit naturally. With Reduce Motion, switch each element at its scroll position without fading or moving it across the screen.
+
 ## Component rules
 
 ### Exercise summaries

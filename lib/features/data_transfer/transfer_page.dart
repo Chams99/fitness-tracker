@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 import '../progress/performance_chart.dart';
@@ -34,7 +35,6 @@ class TransferPage extends ConsumerStatefulWidget {
 
 class _TransferPageState extends ConsumerState<TransferPage> {
   final _text = TextEditingController();
-  final _scroll = ScrollController();
   final _previewAnchor = GlobalKey();
   bool _busy = false, _allowRepeat = false, _includeCatalog = false;
   bool _showConflictList = false, _confirming = false;
@@ -68,7 +68,6 @@ class _TransferPageState extends ConsumerState<TransferPage> {
   @override
   void dispose() {
     _text.dispose();
-    _scroll.dispose();
     super.dispose();
   }
 
@@ -751,18 +750,20 @@ class _TransferPageState extends ConsumerState<TransferPage> {
         ? ref.watch(catalogProvider)
         : null;
     final waitingForNames = promptCatalog != null && !promptCatalog.hasValue;
+    final title = widget.activity ? 'Import from AI chat' : 'Import backup';
 
     return ProtectDraft<void>(
       dirty: false,
       busy: _busy,
-      child: Scaffold(
-        appBar: secondaryBar(context),
-        body: ScreenScroll(
-          controller: _scroll,
+      child: CollapsingPage(
+        title: title,
+        body: (controller, titleKey, _) => ScreenScroll(
+          controller: controller,
           children: [
             ScreenHeading(
-              widget.activity ? 'Import from AI chat' : 'Import backup',
+              title,
               top: 0,
+              titleKey: titleKey,
               subtitle: widget.activity
                   ? 'Bring in records you already logged in a chat.'
                   : 'Restore a backup saved as JSON.',
@@ -870,7 +871,7 @@ class _TransferPageState extends ConsumerState<TransferPage> {
             FormProblem(_problem),
           ],
         ),
-        bottomNavigationBar: KeyboardFooter(
+        footer: KeyboardFooter(
           child: ActionFooter(
             label: preview
                 ? (widget.activity

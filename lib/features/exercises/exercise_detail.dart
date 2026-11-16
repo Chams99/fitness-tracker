@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 import '../goals/goal_page.dart';
@@ -125,47 +126,43 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
         ? ref.watch(entries)
         : null;
 
-    return Scaffold(
-      appBar: secondaryBar(
-        context,
-        actions: [
-          if (exercise != null)
-            PopupMenuButton<String>(
-              tooltip: 'Exercise options',
-              enabled: !_busy,
-              icon: const Icon(LucideIcons.ellipsis, size: 20),
-              onSelected: (choice) async {
-                if (choice == 'edit') {
-                  await openExerciseEditor(context, item: item);
-                } else if (choice == 'delete') {
-                  await _delete(exercise);
-                } else {
-                  await _archive(exercise);
-                }
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Text('Edit exercise'),
+    return CollapsingPage(
+      title: exercise?.name,
+      actions: [
+        if (exercise != null)
+          PopupMenuButton<String>(
+            tooltip: 'Exercise options',
+            enabled: !_busy,
+            icon: const Icon(LucideIcons.ellipsis, size: 20),
+            onSelected: (choice) async {
+              if (choice == 'edit') {
+                await openExerciseEditor(context, item: item);
+              } else if (choice == 'delete') {
+                await _delete(exercise);
+              } else {
+                await _archive(exercise);
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'edit', child: Text('Edit exercise')),
+              PopupMenuItem(
+                value: 'archive',
+                child: Text(
+                  exercise.archived ? 'Restore exercise' : 'Archive exercise',
                 ),
-                PopupMenuItem(
-                  value: 'archive',
-                  child: Text(
-                    exercise.archived ? 'Restore exercise' : 'Archive exercise',
-                  ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Text(
+                  'Delete exercise',
+                  style: TextStyle(color: context.colors.danger),
                 ),
-                PopupMenuItem(
-                  value: 'delete',
-                  child: Text(
-                    'Delete exercise',
-                    style: TextStyle(color: context.colors.danger),
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
-      body: ScreenScroll(
+              ),
+            ],
+          ),
+      ],
+      body: (controller, titleKey, _) => ScreenScroll(
+        controller: controller,
         width: 1100,
         children: [
           AsyncPanel(
@@ -185,6 +182,7 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
                 children: [
                   ScreenHeading(
                     exercise.name,
+                    titleKey: titleKey,
                     leading: ExerciseIcon(exercise.name, size: 40),
                     top: 0,
                     subtitle:
@@ -282,7 +280,7 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
           ),
         ],
       ),
-      bottomNavigationBar: exercise == null
+      footer: exercise == null
           ? null
           : KeyboardFooter(
               child: ActionFooter(

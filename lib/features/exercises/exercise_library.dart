@@ -7,6 +7,7 @@ import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../core/database/tracker_repository.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/draft_sheet.dart';
 import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
@@ -158,13 +159,15 @@ class _ExerciseLibraryState extends ConsumerState<ExerciseLibrary> {
     final items = catalog.value;
     final active = items?.where((item) => !item.exercise.archived).length;
     void create() => openExerciseEditor(context);
-    return Scaffold(
-      appBar: secondaryBar(context),
-      body: ScreenScroll(
+    return CollapsingPage(
+      title: 'Exercises',
+      body: (controller, titleKey, _) => ScreenScroll(
+        controller: controller,
         children: [
           ScreenHeading(
             'Exercises',
             top: 0,
+            titleKey: titleKey,
             subtitleLoading: !catalog.hasValue && !catalog.hasError,
             subtitle: items == null
                 ? null

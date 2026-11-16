@@ -475,6 +475,7 @@ class ScreenHeading extends StatelessWidget {
     this.fadeSubtitle = true,
     this.action,
     this.leading,
+    this.titleKey,
     this.top = Space.md,
     this.bottom = Space.md,
     super.key,
@@ -484,6 +485,7 @@ class ScreenHeading extends StatelessWidget {
   final bool subtitleLoading;
   final bool fadeSubtitle;
   final Widget? action, leading;
+  final Key? titleKey;
   final double top, bottom;
 
   @override
@@ -497,9 +499,12 @@ class ScreenHeading extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Semantics(
-                header: true,
-                child: Text(title, style: context.type.headlineLarge),
+              SizeChangedLayoutNotifier(
+                child: Semantics(
+                  key: titleKey,
+                  header: true,
+                  child: Text(title, style: context.type.headlineLarge),
+                ),
               ),
               if (subtitle != null || subtitleLoading) ...[
                 const SizedBox(height: Space.xs),
@@ -650,22 +655,6 @@ Route<T> platformPageRoute<T>(BuildContext context, WidgetBuilder builder) =>
     ? CupertinoPageRoute<T>(builder: builder)
     : MaterialPageRoute<T>(builder: builder);
 
-PreferredSizeWidget secondaryBar(
-  BuildContext context, {
-  String? title,
-  List<Widget>? actions,
-}) => AppBar(
-  automaticallyImplyLeading: false,
-  centerTitle: title != null,
-  title: title == null
-      ? null
-      : Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-  titleTextStyle: context.type.titleMedium,
-  leading: BackButton(onPressed: () => Navigator.maybePop(context)),
-  leadingWidth: 56,
-  actions: actions,
-);
-
 class ActionFooter extends StatelessWidget {
   const ActionFooter({
     required this.label,
@@ -780,27 +769,6 @@ class ActionProgressLine extends StatelessWidget {
                 : const LinearProgressIndicator(minHeight: 2),
           )
         : null,
-  );
-}
-
-class FormLayout extends StatelessWidget {
-  const FormLayout({
-    required this.title,
-    required this.children,
-    this.footer,
-    this.width = Space.formWidth,
-    super.key,
-  });
-  final String title;
-  final List<Widget> children;
-  final Widget? footer;
-  final double width;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: secondaryBar(context, title: title),
-    body: ScreenScroll(width: width, children: children),
-    bottomNavigationBar: footer == null ? null : KeyboardFooter(child: footer!),
   );
 }
 

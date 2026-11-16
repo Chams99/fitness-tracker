@@ -9,6 +9,7 @@ import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/body_metrics.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/ui.dart';
 import 'measurement_input.dart';
 
@@ -44,12 +45,14 @@ class _WeightHistoryPageState extends ConsumerState<WeightHistoryPage> {
         ? profile.whenData((_) => visibleRows.requireValue)
         : visibleRows;
     void logWeight() => context.push('/profile/weigh-in');
-    return Scaffold(
-      appBar: secondaryBar(context),
-      body: ScreenScroll(
+    return CollapsingPage(
+      title: 'Weight history',
+      body: (controller, titleKey, _) => ScreenScroll(
+        controller: controller,
         children: [
           ScreenHeading(
             'Weight history',
+            titleKey: titleKey,
             top: 0,
             action: QuietButton(
               'Log weight',

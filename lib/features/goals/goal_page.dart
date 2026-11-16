@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 
@@ -239,6 +240,8 @@ class _GoalPageState extends ConsumerState<GoalPage> {
       busy: _busy,
       child: FormLayout(
         title: widget.original == null ? 'Set a goal' : 'Edit goal',
+        subtitle: '${widget.exercise.name} · One best-set goal',
+        leading: ExerciseIcon(widget.exercise.name, size: 40),
         footer: ActionFooter(
           label: 'Save goal',
           onPressed: _save,
@@ -254,12 +257,6 @@ class _GoalPageState extends ConsumerState<GoalPage> {
                 ),
         ),
         children: [
-          ScreenHeading(
-            widget.exercise.name,
-            leading: ExerciseIcon(widget.exercise.name, size: 40),
-            subtitle: 'One best-set goal',
-            top: 0,
-          ),
           const SizedBox(height: 10),
           const SectionTitle('Target'),
           const SizedBox(height: 10),

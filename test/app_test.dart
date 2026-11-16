@@ -759,6 +759,13 @@ void main() {
         await _pumpApp(tester, repo);
         await _openActivityPreview(tester);
 
+        final compactTitle = find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Import from AI chat'),
+        );
+        expect(compactTitle, findsOneWidget);
+        expect(visibleText('Import preview'), findsOneWidget);
+        expect(visibleText('Confirm import'), findsOneWidget);
         expect(find.byType(Sparkline), findsNWidgets(4));
         expect(find.textContaining('Latest 18 reps'), findsOneWidget);
         expect(
@@ -1089,6 +1096,147 @@ void main() {
       await clean(tester, repo);
     }
   });
+
+  testWidgets(
+    'Exercise Detail moves its name into the pinned toolbar and back',
+    (tester) async {
+      final repo = TrackerRepository(
+        TrackerDatabase(NativeDatabase.memory()),
+        now: () => fixedNow,
+      );
+      final semantics = tester.ensureSemantics();
+      try {
+        final exercise = await repo.createExercise(
+          'Demo squats',
+          Measurement.repetitions,
+        );
+        await repo.log([
+          for (var i = 0; i < 8; i++)
+            EntryDraft(
+              exerciseId: exercise.id,
+              day: CalendarDay.fromDate(fixedNow).plusDays(-i),
+              sets: [(id: null, value: 15, reps: null)],
+            ),
+        ]);
+        await _pumpApp(tester, repo, height: 640, scale: 1.6);
+        await tapText(tester, 'Demo squats');
+        final title = find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Demo squats'),
+        );
+        final scroll = tester.state<ScrollableState>(
+          find.byType(Scrollable).first,
+        );
+        final back = find.byTooltip('Back');
+        final options = find.byTooltip('Exercise options');
+        final backPosition = tester.getTopLeft(back);
+        final optionsPosition = tester.getTopLeft(options);
+        expect(title, findsNothing);
+
+        scroll.position.jumpTo(160);
+        await tester.pumpAndSettle();
+        expect(scroll.position.pixels, 160);
+        expect(title, findsOneWidget);
+        expect(
+          tester.semantics.simulatedAccessibilityTraversal().map(
+            (node) => node.label,
+          ),
+          contains('Demo squats'),
+        );
+        expect(tester.getTopLeft(back), backPosition);
+        expect(tester.getTopLeft(options), optionsPosition);
+
+        scroll.position.jumpTo(0);
+        await tester.pumpAndSettle();
+        expect(title, findsNothing);
+        await tester.tap(back);
+        await tester.pumpAndSettle();
+        expect(back, findsNothing);
+        expect(visibleText('Overview'), findsWidgets);
+      } finally {
+        semantics.dispose();
+        await clean(tester, repo);
+      }
+    },
+  );
+
+  for (final reducedMotion in [false, true]) {
+    testWidgets(
+      'Profile shows its title beside Back before the avatar docks with Reduce Motion ${reducedMotion ? 'on' : 'off'}',
+      (tester) async {
+        final repo = TrackerRepository(
+          TrackerDatabase(NativeDatabase.memory()),
+          now: () => fixedNow,
+        );
+        try {
+          await _pumpApp(
+            tester,
+            repo,
+            height: 640,
+            reducedMotion: reducedMotion,
+          );
+          await tester.tap(find.byTooltip('Profile'));
+          await tester.pumpAndSettle();
+          final avatar = find.byType(ProfileAvatar);
+          final scroll = tester.state<ScrollableState>(
+            find.byType(Scrollable).first,
+          );
+          final appBar = tester.getRect(find.byType(AppBar));
+          final toolbarTitle = find
+              .descendant(
+                of: find.byType(AppBar),
+                matching: find.text('Profile'),
+              )
+              .hitTestable();
+          final headingEnd =
+              tester.getBottomLeft(visibleText('Profile')).dy - appBar.bottom;
+          final expanded = tester.getRect(avatar);
+          expect(expanded.width, 74);
+          expect(expanded.top, greaterThan(appBar.bottom));
+          expect(find.text('Edit profile').hitTestable(), findsOneWidget);
+          expect(toolbarTitle, findsNothing);
+
+          scroll.position.jumpTo(headingEnd - 10);
+          await tester.pump();
+          expect(toolbarTitle, reducedMotion ? findsNothing : findsOneWidget);
+
+          scroll.position.jumpTo(headingEnd + 4);
+          await tester.pump();
+          expect(toolbarTitle, findsOneWidget);
+          final titleWhileMoving = tester.getRect(toolbarTitle);
+          final moving = tester.getRect(avatar);
+          expect(
+            moving.width,
+            reducedMotion ? 74.0 : inExclusiveRange(32.0, 74.0),
+          );
+
+          scroll.position.jumpTo(154);
+          await tester.pumpAndSettle();
+          final compact = tester.getRect(avatar);
+          expect(compact.width, closeTo(32, 0.001));
+          expect(appBar.contains(compact.center), isTrue);
+          expect(tester.getRect(toolbarTitle), titleWhileMoving);
+          expect(
+            compact.left,
+            closeTo(
+              appBar.left +
+                  tester.widget<AppBar>(find.byType(AppBar)).leadingWidth!,
+              0.01,
+            ),
+          );
+          expect(titleWhileMoving.left, closeTo(compact.right + 8, 0.01));
+          expect(avatar, findsOneWidget);
+
+          scroll.position.jumpTo(0);
+          await tester.pumpAndSettle();
+          expect(tester.getRect(avatar), expanded);
+          expect(toolbarTitle, findsNothing);
+        } finally {
+          await clean(tester, repo);
+        }
+      },
+    );
+  }
 
   testWidgets(
     'Profile keeps actions and preferences in place while profile and weight load',

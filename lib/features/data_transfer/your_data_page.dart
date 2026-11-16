@@ -7,6 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/ui.dart';
 import 'transfer_codec.dart';
 
@@ -134,11 +135,12 @@ class _YourDataPageState extends ConsumerState<YourDataPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: secondaryBar(context),
-    body: ScreenScroll(
+  Widget build(BuildContext context) => CollapsingPage(
+    title: 'Your data',
+    body: (controller, titleKey, _) => ScreenScroll(
+      controller: controller,
       children: [
-        const ScreenHeading('Your data', top: 0),
+        ScreenHeading('Your data', top: 0, titleKey: titleKey),
         Text(
           'Your records are stored on this device.',
           style: context.type.bodyMedium,

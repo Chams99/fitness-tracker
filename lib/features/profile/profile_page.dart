@@ -10,6 +10,7 @@ import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/body_metrics.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/ui.dart';
 import 'appearance_picker.dart';
 import 'measurement_input.dart';
@@ -23,12 +24,23 @@ class ProfilePage extends ConsumerWidget {
     final profile = ref.watch(profileProvider);
     final weights = weighInsProvider(latestFilter);
     final latest = ref.watch(weights);
-    return Scaffold(
-      appBar: secondaryBar(context),
-      body: ScreenScroll(
+    final value = profile.value;
+    return CollapsingPage(
+      title: 'Profile',
+      avatar: SkeletonCrossfade(
+        placeholder: const Skeleton(width: 74, height: 74, circular: true),
+        child: value == null && !profile.hasError
+            ? null
+            : ProfileAvatar(
+                photo: value?.photo,
+                preset: value?.avatarPreset ?? AvatarPreset.anonymous,
+              ),
+      ),
+      body: (controller, titleKey, avatarSlot) => ScreenScroll(
+        controller: controller,
         children: [
-          const ScreenHeading('Profile', top: 0),
-          _ProfileIdentity(profile: profile),
+          ScreenHeading('Profile', top: 0, titleKey: titleKey),
+          _ProfileIdentity(profile: profile, avatarSlot: avatarSlot),
           const SizedBox(height: Space.xl),
           const SectionTitle('Body measurements'),
           const SizedBox(height: Space.sm),
@@ -65,31 +77,19 @@ class ProfilePage extends ConsumerWidget {
 }
 
 class _ProfileIdentity extends ConsumerWidget {
-  const _ProfileIdentity({required this.profile});
+  const _ProfileIdentity({required this.profile, required this.avatarSlot});
   final AsyncValue<LocalProfile> profile;
+  final Widget avatarSlot;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final nameStyle = context.type.titleLarge;
-    final value = profile.value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            SkeletonCrossfade(
-              placeholder: const Skeleton(
-                width: 74,
-                height: 74,
-                circular: true,
-              ),
-              child: value == null && !profile.hasError
-                  ? null
-                  : ProfileAvatar(
-                      photo: value?.photo,
-                      preset: value?.avatarPreset ?? AvatarPreset.anonymous,
-                    ),
-            ),
+            avatarSlot,
             const SizedBox(width: Space.md),
             Expanded(
               child: Column(
