@@ -1,7 +1,9 @@
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/branding.dart';
 import '../../app/providers.dart';
@@ -12,6 +14,7 @@ import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/ui.dart';
 import '../update/android_update_host.dart';
 import 'appearance_picker.dart';
+import 'email_support.dart';
 import 'measurement_input.dart';
 import 'profile_avatar.dart';
 
@@ -373,6 +376,16 @@ class _PreferencesState extends ConsumerState<_Preferences> {
 class _AboutFooter extends ConsumerWidget {
   const _AboutFooter();
 
+  Future<void> _openPrivacyPolicy(BuildContext context) async {
+    final uri = Uri.https('fitness-tracker.dhibi.tn', '/privacy/');
+    try {
+      if (await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+    } on PlatformException {
+      // Use the same feedback if the platform cannot open the browser.
+    }
+    if (context.mounted) announce(context, 'Couldn’t open the privacy policy.');
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final metadata = ref.watch(appBuildProvider);
@@ -407,6 +420,8 @@ class _AboutFooter extends ConsumerWidget {
                   ),
           ),
           const AndroidUpdateCheck(),
+          EmailSupportButton(buildInfo: build),
+          QuietButton('Privacy Policy', () => _openPrivacyPolicy(context)),
           QuietButton(
             'Licenses',
             () => showLicensePage(
