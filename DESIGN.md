@@ -154,6 +154,8 @@ If the first view needs several reads, keep one placeholder until its content is
 
 Use inline progress for actions such as saving or importing. Keep the control in place, give it a status label such as “Saving…”, and prevent duplicate submission. Use a static indicator when Reduce Motion is enabled. Preserve the draft on failure and offer a retry close to the affected content.
 
+On Android, show the optional update dialog after Overview opens. Show the version and download size before the user chooses Update. Show download progress and recovery actions on the App update page. Keep the download running if the user leaves the page. Use a tappable status row below the Overview heading to reopen update details. Draw download progress along the row’s bottom divider, and show a plain divider when the update is ready. Place Check for updates below the version in Android Profile. A manual check can reopen an active update or offer a release again after the user chooses Later. Explain the source permission only when the user chooses Install, and use Android’s own confirmation for the update.
+
 Use the native splash for app startup. Show “Opening your records…” if the app is still opening local storage when the native splash hands off.
 
 ### Empty states

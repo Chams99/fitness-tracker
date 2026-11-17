@@ -512,6 +512,10 @@ void main() {
         final version = 'Version ${info.version} (${info.number})';
         await _reveal(tester, find.text(version));
         expect(_visible(version), findsOneWidget);
+        expect(
+          find.text('Check for updates'),
+          Platform.isAndroid ? findsOneWidget : findsNothing,
+        );
         expect(find.text('Licenses'), findsOneWidget);
         await capture('09-profile-footer');
         await tester.drag(

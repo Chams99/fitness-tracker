@@ -10,6 +10,7 @@ import '../../shared/domain/body_metrics.dart';
 import '../../shared/domain/training.dart';
 import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/ui.dart';
+import '../update/android_update_host.dart';
 import 'appearance_picker.dart';
 import 'measurement_input.dart';
 import 'profile_avatar.dart';
@@ -405,6 +406,7 @@ class _AboutFooter extends ConsumerWidget {
                     textAlign: TextAlign.center,
                   ),
           ),
+          const AndroidUpdateCheck(),
           QuietButton(
             'Licenses',
             () => showLicensePage(

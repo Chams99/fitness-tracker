@@ -75,7 +75,7 @@ jobs:
           unset ANDROID_RELEASE_KEYSTORE_BASE64
           flutter build apk --release
 
-      - name: Verify signature and prepare release files
+      - name: Verify APK and prepare release files
         shell: bash
         run: |
           apk=build/app/outputs/flutter-apk/app-release.apk
@@ -86,11 +86,37 @@ jobs:
             echo "::error::The APK signature does not match the Fitness Tracker release certificate."
             exit 1
           fi
+          # Read the version from the signed APK, not a separate release counter.
+          badging=$("$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging "$apk")
+          package=$(sed -n '/^package: /p' <<< "$badging")
+          fields="^package: name='tn[.]dhibi[.]fitness_tracker' versionCode='([1-9][0-9]{0,9})' versionName='([^']+)'"
+          if [[ ! "$package" =~ $fields ]]; then
+            echo "::error::The APK has an unexpected application ID or version."
+            exit 1
+          fi
+          code=${BASH_REMATCH[1]}
+          version=${BASH_REMATCH[2]}
+          if [[ "v$version" != "$GITHUB_REF_NAME" ]] || (( code > 2100000000 )); then
+            echo "::error::The APK version must match the tag and use a valid Android versionCode."
+            exit 1
+          fi
+          note=""
+          if [[ "$(git cat-file -t "$GITHUB_REF")" == tag ]]; then
+            note=$(git for-each-ref --format='%(contents:subject)' "$GITHUB_REF")
+          fi
+
           mkdir release
           name="Fitness-Tracker-$GITHUB_REF_NAME.apk"
           cp "$apk" "release/$name"
           cd release
           sha256sum "$name" > SHA256SUMS.txt
+          read -r digest _ < SHA256SUMS.txt
+          jq -n --arg version "$version" --argjson code "$code" --arg digest "$digest" \
+            --arg url "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$name" \
+            --arg note "$note" '
+              {schemaVersion: 1, versionName: $version, versionCode: $code, apkUrl: $url, sha256: $digest}
+              + (if $note == "" then {} else {notes: $note[:280]} end)
+            ' > android-update.json
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -103,6 +129,9 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    concurrency:
+      group: android-release-publish
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -111,7 +140,7 @@ jobs:
           name: android-release
           path: release
 
-      - name: Publish APK and checksum
+      - name: Publish APK, checksum, and update metadata
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -120,16 +149,53 @@ jobs:
           cd release
           sha256sum --check --strict SHA256SUMS.txt
           apk="Fitness-Tracker-$GITHUB_REF_NAME.apk"
-          if existing=$(gh release view "$GITHUB_REF_NAME" --json isDraft,assets); then
-            if jq -e --arg apk "$apk" '
+          manifest=android-update.json
+          read -r digest _ < SHA256SUMS.txt
+          valid_code='select(type == "number" and . == floor and . >= 1 and . <= 2100000000)'
+          code=$(jq -er --arg digest "$digest" --arg version "${GITHUB_REF_NAME#v}" '
+            select(.schemaVersion == 1 and .sha256 == $digest and .versionName == $version)
+            | .versionCode | '"$valid_code" "$manifest")
+
+          complete_release() {
+            jq -e --arg apk "$apk" --arg manifest "$manifest" '
               def uploaded($name): any(.assets[]; .name == $name and .state == "uploaded");
-              (.isDraft | not) and uploaded($apk) and uploaded("SHA256SUMS.txt")
-            ' <<< "$existing" >/dev/null; then
-              echo "The release already has its APK and checksum."
+              .isPrerelease == false and uploaded($apk) and uploaded("SHA256SUMS.txt") and uploaded($manifest)
+            ' >/dev/null
+          }
+
+          if existing=$(gh release view "$GITHUB_REF_NAME" --json isDraft,isPrerelease,assets); then
+            if jq -e '.isDraft == false' <<< "$existing" >/dev/null &&
+               complete_release <<< "$existing"; then
+              echo "The release already has its APK, checksum, and update metadata."
               exit 0
             fi
             echo "::error::A draft or incomplete release exists for this tag. Inspect it in GitHub before retrying."
             exit 1
           fi
-          gh release create "$GITHUB_REF_NAME" "$apk" SHA256SUMS.txt \
-            --verify-tag --title "Fitness Tracker $GITHUB_REF_NAME" --generate-notes
+
+          # Build jobs can finish out of order. Compare while holding the publish lock.
+          if latest=$(gh api --include "repos/$GH_REPO/releases/latest"); then
+            latest_tag=$(awk 'body { print } /^\r?$/ { body = 1 }' <<< "$latest" |
+              jq -er --arg manifest "$manifest" '
+                if any(.assets[]; .name == $manifest and .state == "uploaded")
+                then .tag_name else "" end
+              ')
+            if [[ -n "$latest_tag" ]]; then
+              latest_code=$(gh release download "$latest_tag" --pattern "$manifest" --output - |
+                jq -er 'select(.schemaVersion == 1) | .versionCode | '"$valid_code")
+              if (( code <= latest_code )); then
+                echo "::error::The APK build number must exceed the latest published build number ($latest_code)."
+                exit 1
+              fi
+            fi
+          elif [[ ! "$latest" =~ ^HTTP/[0-9.]+[[:space:]]404([[:space:]]|$) ]]; then
+            echo "::error::Could not verify the latest Android release."
+            exit 1
+          fi
+
+          gh release create "$GITHUB_REF_NAME" "$apk" SHA256SUMS.txt "$manifest" \
+            --verify-tag --title "Fitness Tracker $GITHUB_REF_NAME" --generate-notes --draft
+          draft=$(gh release view "$GITHUB_REF_NAME" --json isDraft,isPrerelease,assets)
+          jq -e '.isDraft == true' <<< "$draft" >/dev/null
+          complete_release <<< "$draft"
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest

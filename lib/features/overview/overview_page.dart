@@ -13,6 +13,7 @@ import '../history/entry_row.dart';
 import '../logging/log_page.dart';
 import '../profile/profile_avatar.dart';
 import '../progress/performance_chart.dart';
+import '../update/android_update_host.dart';
 
 class OverviewPage extends ConsumerWidget {
   const OverviewPage({super.key});
@@ -42,6 +43,7 @@ class OverviewPage extends ConsumerWidget {
                     'Since ${fullDay(overview!.firstDay!)}',
           action: const _ProfileButton(),
         ),
+        const AndroidUpdateRow(),
         AsyncPanel(
           content,
           loadingLabel: 'Loading overview',

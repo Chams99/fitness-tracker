@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,7 @@ import 'app/branding.dart';
 import 'app/navigation.dart';
 import 'app/providers.dart';
 import 'app/theme.dart';
+import 'features/update/android_update_host.dart';
 import 'shared/domain/training.dart';
 import 'shared/widgets/ui.dart';
 
@@ -46,11 +48,13 @@ class FitnessApp extends ConsumerStatefulWidget {
 }
 
 class _FitnessAppState extends ConsumerState<FitnessApp> {
-  final _router = createRouter();
+  final _updateObserver = Platform.isAndroid ? UpdateNavigatorObserver() : null;
+  late final _router = createRouter(observer: _updateObserver);
 
   @override
   void dispose() {
     _router.dispose();
+    _updateObserver?.top.dispose();
     super.dispose();
   }
 
@@ -85,7 +89,17 @@ class _FitnessAppState extends ConsumerState<FitnessApp> {
       builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
         value: trackerBars(Theme.of(context).brightness),
         child: opening.hasValue && preferences.hasValue
-            ? child!
+            ? switch (_updateObserver) {
+                final observer? => AndroidUpdateHost(
+                  router: _router,
+                  observer: observer,
+                  installedVersionCode: () async => int.tryParse(
+                    (await ref.read(appBuildProvider.future)).number,
+                  ),
+                  child: child!,
+                ),
+                null => child!,
+              }
             : opening.hasError || preferences.hasError
             ? Scaffold(
                 body: SafeArea(
