@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 import '../progress/performance_chart.dart';
@@ -34,7 +35,6 @@ class TransferPage extends ConsumerStatefulWidget {
 
 class _TransferPageState extends ConsumerState<TransferPage> {
   final _text = TextEditingController();
-  final _scroll = ScrollController();
   final _previewAnchor = GlobalKey();
   bool _busy = false, _allowRepeat = false, _includeCatalog = false;
   bool _showConflictList = false, _confirming = false;
@@ -68,7 +68,6 @@ class _TransferPageState extends ConsumerState<TransferPage> {
   @override
   void dispose() {
     _text.dispose();
-    _scroll.dispose();
     super.dispose();
   }
 
@@ -747,18 +746,24 @@ class _TransferPageState extends ConsumerState<TransferPage> {
         (!widget.activity ||
             (_activityPlan != null &&
                 (!_activityPlan!.repeated || _allowRepeat)));
+    final promptCatalog = widget.activity && _includeCatalog
+        ? ref.watch(catalogProvider)
+        : null;
+    final waitingForNames = promptCatalog != null && !promptCatalog.hasValue;
+    final title = widget.activity ? 'Import from AI chat' : 'Import backup';
 
     return ProtectDraft<void>(
       dirty: false,
       busy: _busy,
-      child: Scaffold(
-        appBar: secondaryBar(context),
-        body: ScreenScroll(
-          controller: _scroll,
+      child: CollapsingPage(
+        title: title,
+        body: (controller, titleKey, _) => ScreenScroll(
+          controller: controller,
           children: [
             ScreenHeading(
-              widget.activity ? 'Import from AI chat' : 'Import backup',
+              title,
               top: 0,
+              titleKey: titleKey,
               subtitle: widget.activity
                   ? 'Bring in records you already logged in a chat.'
                   : 'Restore a backup saved as JSON.',
@@ -773,7 +778,13 @@ class _TransferPageState extends ConsumerState<TransferPage> {
                 value: _includeCatalog,
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Include exercise names in prompt'),
-                subtitle: const Text('Shares names and units only.'),
+                subtitle: Text(
+                  waitingForNames
+                      ? (promptCatalog.hasError
+                            ? 'Couldn’t load exercise names.'
+                            : 'Loading exercise names…')
+                      : 'Shares names and units only.',
+                ),
                 onChanged: _busy
                     ? null
                     : (value) =>
@@ -784,17 +795,15 @@ class _TransferPageState extends ConsumerState<TransferPage> {
                 runSpacing: 8,
                 children: [
                   OutlinedButton(
-                    onPressed: _busy
+                    onPressed: _busy || waitingForNames
                         ? null
                         : () => _copy(
                             aiPrompt(
                               ref.read(nowProvider)(),
-                              catalog: _includeCatalog
-                                  ? (ref.read(catalogProvider).value ?? [])
-                                        .where((r) => !r.exercise.archived)
-                                        .map((r) => r.exercise)
-                                        .toList()
-                                  : const [],
+                              catalog: (promptCatalog?.value ?? [])
+                                  .where((r) => !r.exercise.archived)
+                                  .map((r) => r.exercise)
+                                  .toList(),
                             ),
                             'Prompt',
                           ),
@@ -804,6 +813,11 @@ class _TransferPageState extends ConsumerState<TransferPage> {
                     'View example',
                     _busy ? null : () => _example(today),
                   ),
+                  if (waitingForNames && promptCatalog.hasError)
+                    QuietButton(
+                      'Retry exercise names',
+                      _busy ? null : () => ref.invalidate(catalogProvider),
+                    ),
                 ],
               ),
               if (_copyMessage != null)
@@ -857,7 +871,7 @@ class _TransferPageState extends ConsumerState<TransferPage> {
             FormProblem(_problem),
           ],
         ),
-        bottomNavigationBar: KeyboardFooter(
+        footer: KeyboardFooter(
           child: ActionFooter(
             label: preview
                 ? (widget.activity
@@ -867,6 +881,7 @@ class _TransferPageState extends ConsumerState<TransferPage> {
                       : 'Restore backup')
                 : 'Validate and preview',
             busy: _busy,
+            busyLabel: preview ? 'Importing…' : 'Checking file…',
             onPressed: preview ? (canImport ? _apply : null) : _validatePaste,
             secondary: preview && (_text.text.isNotEmpty || _fileText != null)
                 ? QuietButton('Validate again', _busy ? null : _validatePaste)

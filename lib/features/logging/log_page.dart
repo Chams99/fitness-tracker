@@ -7,6 +7,7 @@ import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
 import '../../shared/widgets/draft_sheet.dart';
 import '../../shared/widgets/exercise_icon.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/ui.dart';
 import '../exercises/exercise_library.dart';
 
@@ -67,6 +68,8 @@ class _ExercisePicker extends ConsumerWidget {
             final query = normalizeName(input.text);
             return AsyncPanel(
               catalog,
+              loadingLabel: 'Loading exercises',
+              loading: const SkeletonRows(),
               retry: () => ref.invalidate(catalogProvider),
               builder: (list) {
                 final matches = list
@@ -115,6 +118,9 @@ class _ExercisePicker extends ConsumerWidget {
                         message: query.isNotEmpty
                             ? 'Try another name or create an exercise.'
                             : 'Create an exercise for the result you want to log.',
+                        secondary: query.isEmpty
+                            ? null
+                            : QuietButton('Clear search', search.clear),
                       ),
                     if (used.isNotEmpty && query.isEmpty)
                       rows('Recently used', used),

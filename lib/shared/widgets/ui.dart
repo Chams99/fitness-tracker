@@ -40,37 +40,291 @@ class AsyncPanel<T> extends StatelessWidget {
   const AsyncPanel(
     this.value, {
     required this.builder,
-    required this.retry,
+    this.retry,
+    required this.loading,
+    this.loadingLabel = 'Loading records',
+    this.fadeContent = true,
     super.key,
   });
   final AsyncValue<T> value;
   final Widget Function(T) builder;
-  final VoidCallback retry;
+  final VoidCallback? retry;
+  final Widget loading;
+  final String loadingLabel;
+  final bool fadeContent;
 
   @override
   Widget build(BuildContext context) {
-    if (value.hasValue) return builder(value.requireValue);
-    if (value.hasError) {
+    if (!value.hasValue && value.hasError) {
       return EmptyBlock(
         title: 'Couldn’t load this view',
         message: describeError(
           value.error!,
           fallback: 'Try reading your local records again.',
         ),
-        action: 'Try again',
+        action: retry == null ? null : 'Try again',
         onAction: retry,
       );
     }
-    return const SizedBox(
-      height: 180,
-      child: Center(
-        child: SizedBox.square(
-          dimension: 22,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
+    return SkeletonCrossfade(
+      placeholder: loading,
+      loadingLabel: loadingLabel,
+      fadeContent: fadeContent,
+      child: value.hasValue ? builder(value.requireValue) : null,
+    );
+  }
+}
+
+/// Shows [placeholder] until [child] becomes available.
+class SkeletonCrossfade extends StatefulWidget {
+  const SkeletonCrossfade({
+    required this.placeholder,
+    required this.child,
+    this.loadingLabel,
+    this.fadeContent = true,
+    super.key,
+  });
+
+  final Widget placeholder;
+  final Widget? child;
+  final String? loadingLabel;
+
+  /// When false, only [Skeleton] and [SkeletonDivider] paint with fading color.
+  final bool fadeContent;
+
+  @override
+  State<SkeletonCrossfade> createState() => _SkeletonCrossfadeState();
+}
+
+class _SkeletonCrossfadeState extends State<SkeletonCrossfade> {
+  Widget? _outgoingPlaceholder;
+
+  @override
+  void didUpdateWidget(SkeletonCrossfade oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.child == null) {
+      _outgoingPlaceholder = null;
+    } else if (oldWidget.child == null) {
+      _outgoingPlaceholder = oldWidget.placeholder;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.child == null) {
+      return Semantics(
+        label: widget.loadingLabel,
+        excludeSemantics: true,
+        child: widget.placeholder,
+      );
+    }
+    final outgoing = _outgoingPlaceholder;
+    final animate =
+        outgoing != null && !MediaQuery.disableAnimationsOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) => TweenAnimationBuilder<double>(
+        tween: Tween(begin: animate ? 0 : 1, end: 1),
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        builder: (_, animation, child) {
+          final progress = animate ? animation : 1.0;
+          return Stack(
+            children: [
+              // Keep the skeleton within the original slot's constraints.
+              // Only the new content determines the size of the stack.
+              if (outgoing != null && progress < 1)
+                PositionedDirectional(
+                  start: 0,
+                  top: 0,
+                  child: ConstrainedBox(
+                    constraints: constraints,
+                    child: ExcludeSemantics(
+                      child: IgnorePointer(
+                        child: widget.fadeContent
+                            ? Opacity(opacity: 1 - progress, child: outgoing)
+                            : _SkeletonFade(
+                                opacity: 1 - progress,
+                                child: outgoing,
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              if (widget.fadeContent)
+                Opacity(
+                  // Keep real content visible from the first resolved frame.
+                  opacity: .25 + .75 * progress,
+                  alwaysIncludeSemantics: true,
+                  child: child,
+                )
+              else
+                child!,
+            ],
+          );
+        },
+        child: widget.child,
       ),
     );
   }
+}
+
+class _SkeletonFade extends InheritedWidget {
+  const _SkeletonFade({required this.opacity, required super.child});
+
+  final double opacity;
+
+  static Color colorOf(BuildContext context) {
+    final color = context.colors.border;
+    final fade = context.dependOnInheritedWidgetOfExactType<_SkeletonFade>();
+    return fade == null
+        ? color
+        : color.withValues(alpha: color.a * fade.opacity);
+  }
+
+  @override
+  bool updateShouldNotify(_SkeletonFade oldWidget) =>
+      opacity != oldWidget.opacity;
+}
+
+class EmptyStateIllustration extends StatelessWidget {
+  const EmptyStateIllustration(
+    this.asset, {
+    required this.maxWidth,
+    required this.aspectRatio,
+    super.key,
+  });
+
+  final String asset;
+  final double maxWidth, aspectRatio;
+
+  @override
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: BoxConstraints(maxWidth: maxWidth),
+    child: AspectRatio(
+      aspectRatio: aspectRatio,
+      child: Image.asset(
+        asset,
+        fit: BoxFit.contain,
+        excludeFromSemantics: true,
+        frameBuilder: (_, child, frame, _) => SkeletonCrossfade(
+          fadeContent: false,
+          placeholder: AspectRatio(
+            aspectRatio: aspectRatio,
+            child: const Skeleton(height: double.infinity),
+          ),
+          child: frame == null ? null : child,
+        ),
+        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      ),
+    ),
+  );
+}
+
+class Skeleton extends StatelessWidget {
+  const Skeleton({
+    this.width,
+    required this.height,
+    this.circular = false,
+    super.key,
+  });
+
+  final double? width;
+  final double height;
+  final bool circular;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: width,
+    height: height,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: _SkeletonFade.colorOf(context),
+        shape: circular ? BoxShape.circle : BoxShape.rectangle,
+        borderRadius: circular ? null : BorderRadius.circular(4),
+      ),
+    ),
+  );
+}
+
+class SkeletonDivider extends StatelessWidget {
+  const SkeletonDivider({this.height, super.key});
+
+  final double? height;
+
+  @override
+  Widget build(BuildContext context) =>
+      Divider(height: height, color: _SkeletonFade.colorOf(context));
+}
+
+/// Uses a real line of text to reserve the correct height at any text size.
+class SkeletonText extends StatelessWidget {
+  const SkeletonText({required this.width, this.style, super.key});
+
+  final double width;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: Stack(
+      alignment: AlignmentDirectional.centerStart,
+      children: [
+        Opacity(opacity: 0, child: Text(' ', style: style, maxLines: 1)),
+        Positioned.fill(
+          child: FractionallySizedBox(
+            alignment: AlignmentDirectional.centerStart,
+            heightFactor: .58,
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: LayoutBuilder(
+                builder: (_, constraints) =>
+                    Skeleton(width: width, height: constraints.maxHeight),
+              ),
+            ),
+          ),
+        ),
+        SizedBox(width: width),
+      ],
+    ),
+  );
+}
+
+class SkeletonRows extends StatelessWidget {
+  const SkeletonRows({this.count = 3, this.rowHeight = 64, super.key});
+
+  final int count;
+  final double rowHeight;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (var index = 0; index < count; index++) ...[
+        SizedBox(
+          height: rowHeight,
+          child: Row(
+            children: [
+              const Skeleton(width: 26, height: 26, circular: true),
+              const SizedBox(width: Space.md),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Skeleton(width: index.isEven ? 124 : 94, height: 12),
+                    const SizedBox(height: 7),
+                    const Skeleton(width: 74, height: 8),
+                  ],
+                ),
+              ),
+              const SizedBox(width: Space.sm),
+              const Skeleton(width: 44, height: 12),
+            ],
+          ),
+        ),
+        const SkeletonDivider(height: 1),
+      ],
+    ],
+  );
 }
 
 class EmptyBlock extends StatelessWidget {
@@ -79,11 +333,15 @@ class EmptyBlock extends StatelessWidget {
     required this.message,
     this.action,
     this.onAction,
+    this.icon,
+    this.secondary,
     super.key,
   });
   final String title, message;
   final String? action;
   final VoidCallback? onAction;
+  final IconData? icon;
+  final Widget? secondary;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -91,6 +349,21 @@ class EmptyBlock extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (icon != null) ...[
+          ExcludeSemantics(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: context.colors.input,
+                borderRadius: BorderRadius.circular(Space.radius),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Icon(icon, size: 24, color: context.colors.green),
+              ),
+            ),
+          ),
+          const SizedBox(height: Space.md),
+        ],
         Text(title, style: context.type.titleLarge),
         const SizedBox(height: Space.sm),
         Text(
@@ -101,6 +374,7 @@ class EmptyBlock extends StatelessWidget {
           const SizedBox(height: Space.md),
           FilledButton(onPressed: onAction, child: Text(action!)),
         ],
+        ?secondary,
       ],
     ),
   );
@@ -197,15 +471,21 @@ class ScreenHeading extends StatelessWidget {
   const ScreenHeading(
     this.title, {
     this.subtitle,
+    this.subtitleLoading = false,
+    this.fadeSubtitle = true,
     this.action,
     this.leading,
+    this.titleKey,
     this.top = Space.md,
     this.bottom = Space.md,
     super.key,
   });
   final String title;
   final String? subtitle;
+  final bool subtitleLoading;
+  final bool fadeSubtitle;
   final Widget? action, leading;
+  final Key? titleKey;
   final double top, bottom;
 
   @override
@@ -219,16 +499,31 @@ class ScreenHeading extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Semantics(
-                header: true,
-                child: Text(title, style: context.type.headlineLarge),
+              SizeChangedLayoutNotifier(
+                child: Semantics(
+                  key: titleKey,
+                  header: true,
+                  child: Text(title, style: context.type.headlineLarge),
+                ),
               ),
-              if (subtitle != null) ...[
+              if (subtitle != null || subtitleLoading) ...[
                 const SizedBox(height: Space.xs),
-                Text(
-                  subtitle!,
-                  style: context.type.bodyMedium?.copyWith(
-                    color: context.colors.muted,
+                SizedBox(
+                  width: double.infinity,
+                  child: SkeletonCrossfade(
+                    fadeContent: fadeSubtitle,
+                    placeholder: SkeletonText(
+                      width: 140,
+                      style: context.type.bodyMedium,
+                    ),
+                    child: subtitle == null
+                        ? null
+                        : Text(
+                            subtitle!,
+                            style: context.type.bodyMedium?.copyWith(
+                              color: context.colors.muted,
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -307,7 +602,7 @@ class FilterButton extends StatelessWidget {
     super.key,
   });
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool prominent;
   final Widget? leading;
 
@@ -360,27 +655,12 @@ Route<T> platformPageRoute<T>(BuildContext context, WidgetBuilder builder) =>
     ? CupertinoPageRoute<T>(builder: builder)
     : MaterialPageRoute<T>(builder: builder);
 
-PreferredSizeWidget secondaryBar(
-  BuildContext context, {
-  String? title,
-  List<Widget>? actions,
-}) => AppBar(
-  automaticallyImplyLeading: false,
-  centerTitle: title != null,
-  title: title == null
-      ? null
-      : Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
-  titleTextStyle: context.type.titleMedium,
-  leading: BackButton(onPressed: () => Navigator.maybePop(context)),
-  leadingWidth: 56,
-  actions: actions,
-);
-
 class ActionFooter extends StatelessWidget {
   const ActionFooter({
     required this.label,
     required this.onPressed,
     this.busy = false,
+    this.busyLabel = 'Saving…',
     this.secondary,
     this.width = Space.formWidth,
     super.key,
@@ -388,6 +668,7 @@ class ActionFooter extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
   final bool busy;
+  final String busyLabel;
   final Widget? secondary;
   final double width;
 
@@ -410,12 +691,35 @@ class ActionFooter extends StatelessWidget {
                 children: [
                   FilledButton(
                     onPressed: busy ? null : onPressed,
-                    child: busy
-                        ? const SizedBox.square(
-                            dimension: 19,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(label, textAlign: TextAlign.center),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Visibility(
+                          visible: !busy,
+                          maintainSize: true,
+                          maintainAnimation: true,
+                          maintainState: true,
+                          child: Text(label, textAlign: TextAlign.center),
+                        ),
+                        if (busy)
+                          Semantics(
+                            liveRegion: true,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const ExcludeSemantics(child: ActionProgress()),
+                                const SizedBox(width: Space.sm),
+                                Flexible(
+                                  child: Text(
+                                    busyLabel,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                   if (secondary != null) Center(child: secondary!),
                 ],
@@ -428,24 +732,43 @@ class ActionFooter extends StatelessWidget {
   );
 }
 
-class FormLayout extends StatelessWidget {
-  const FormLayout({
-    required this.title,
-    required this.children,
-    this.footer,
-    this.width = Space.formWidth,
-    super.key,
-  });
-  final String title;
-  final List<Widget> children;
-  final Widget? footer;
-  final double width;
+class ActionProgress extends StatelessWidget {
+  const ActionProgress({super.key});
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: secondaryBar(context, title: title),
-    body: ScreenScroll(width: width, children: children),
-    bottomNavigationBar: footer == null ? null : KeyboardFooter(child: footer!),
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: 16,
+    child: MediaQuery.disableAnimationsOf(context)
+        ? const Icon(LucideIcons.hourglass, size: 16)
+        : CircularProgressIndicator(
+            strokeWidth: 2,
+            color: context.colors.muted,
+          ),
+  );
+}
+
+class ActionProgressLine extends StatelessWidget {
+  const ActionProgressLine({
+    required this.busy,
+    required this.label,
+    super.key,
+  });
+
+  final bool busy;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 2,
+    child: busy
+        ? Semantics(
+            label: label,
+            liveRegion: true,
+            child: MediaQuery.disableAnimationsOf(context)
+                ? ColoredBox(color: context.colors.green)
+                : const LinearProgressIndicator(minHeight: 2),
+          )
+        : null,
   );
 }
 

@@ -20,7 +20,8 @@ import '../shared/widgets/ui.dart';
 import 'providers.dart';
 import 'theme.dart';
 
-GoRouter createRouter() => GoRouter(
+GoRouter createRouter({NavigatorObserver? observer}) => GoRouter(
+  observers: [?observer],
   routes: [
     StatefulShellRoute.indexedStack(
       pageBuilder: (context, state, shell) =>

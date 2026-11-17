@@ -1,17 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../core/database/tracker_repository.dart';
+import '../../shared/domain/body_metrics.dart';
 import '../../shared/domain/training.dart';
 import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 import '../history/entry_row.dart';
 import '../logging/log_page.dart';
+import '../profile/profile_avatar.dart';
 import '../progress/performance_chart.dart';
+import '../update/android_update_host.dart';
 
 class OverviewPage extends ConsumerWidget {
   const OverviewPage({super.key});
@@ -20,7 +22,12 @@ class OverviewPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final catalog = ref.watch(catalogProvider);
     final value = ref.watch(overviewProvider);
+    final overview = value.value;
+    final exerciseCount = overview?.exercises.length ?? 0;
     final style = ref.watch(durationProvider);
+    final content = value.hasValue && value.requireValue.exercises.isNotEmpty
+        ? catalog.whenData((items) => (value.requireValue, items))
+        : value.whenData((data) => (data, const <CatalogItem>[]));
     return ScreenScroll(
       primary: true,
       width: 1100,
@@ -28,140 +35,209 @@ class OverviewPage extends ConsumerWidget {
       children: [
         ScreenHeading(
           'Overview',
-          subtitle: value.value == null
+          subtitleLoading: !value.hasValue && !value.hasError,
+          fadeSubtitle: false,
+          subtitle: exerciseCount == 0
               ? null
-              : value.value!.exercises.isEmpty
-              ? 'No entries yet'
-              : '${value.value!.exercises.length} ${value.value!.exercises.length == 1 ? 'exercise' : 'exercises'} · '
-                    'Since ${fullDay(value.value!.firstDay!)}',
-          action: RoundControl(
-            LucideIcons.userRound,
-            'Profile',
-            () => context.push('/profile'),
-          ),
+              : '$exerciseCount ${exerciseCount == 1 ? 'exercise' : 'exercises'} · '
+                    'Since ${fullDay(overview!.firstDay!)}',
+          action: const _ProfileButton(),
         ),
+        const AndroidUpdateRow(),
         AsyncPanel(
-          value,
-          retry: () => ref.invalidate(overviewProvider),
-          builder: (data) {
+          content,
+          loadingLabel: 'Loading overview',
+          fadeContent: false,
+          loading: ResponsiveSplit(
+            main: _OverviewSectionSkeleton(
+              headingWidth: 117,
+              rows: const SkeletonRows(rowHeight: 97),
+            ),
+            side: _OverviewSectionSkeleton(
+              headingWidth: 128,
+              rows: const SkeletonRows(count: 2, rowHeight: 78),
+            ),
+          ),
+          retry: () {
+            if (value.hasError) ref.invalidate(overviewProvider);
+            if (catalog.hasError) ref.invalidate(catalogProvider);
+          },
+          builder: (content) {
+            final (data, items) = content;
             if (data.exercises.isEmpty) {
-              return Align(
-                alignment: Alignment.centerLeft,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 445),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        height: (MediaQuery.sizeOf(context).height * .145)
-                            .clamp(24.0, 118.0),
-                      ),
-                      Text(
-                        'Start with one result.',
-                        style: context.type.headlineSmall,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Pick an exercise, enter your result, and choose the date.',
-                        style: context.type.bodyLarge?.copyWith(
-                          color: context.colors.muted,
-                        ),
-                      ),
-                      const SizedBox(height: 22),
-                      FilledButton(
-                        onPressed: () => showLogSheet(context),
-                        child: const Text('Record your first result'),
-                      ),
-                      const SizedBox(height: 4),
-                      if (catalog.value?.isNotEmpty ?? false)
-                        QuietButton(
-                          'Manage exercises',
-                          () => context.push('/exercises'),
-                        ),
-                      QuietButton(
-                        'Import a backup',
-                        () => context.push('/transfer/backup'),
-                      ),
-                      const SizedBox(height: 26),
-                      Text(
-                        'Log whenever you like. Your history starts with what you record.',
-                        style: context.type.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
+              return _FirstResult(
+                hasExercises: catalog.value?.isNotEmpty ?? false,
               );
             }
-            return AsyncPanel(
-              catalog,
-              retry: () => ref.invalidate(catalogProvider),
-              builder: (items) {
-                final map = {
-                  for (final row in items)
-                    if (!row.exercise.archived) row.exercise.id: row.exercise,
-                };
-                final recentByDay = <CalendarDay, List<Entry>>{};
-                for (final entry in data.recent) {
-                  if (map.containsKey(entry.exerciseId)) {
-                    (recentByDay[entry.day] ??= []).add(entry);
-                  }
-                }
-                return ResponsiveSplit(
-                  main: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SectionTitle(
-                        'Your exercises',
-                        action: QuietButton(
-                          'Manage',
-                          () => context.push('/exercises'),
-                        ),
-                      ),
-                      for (final summary in data.exercises)
-                        if (map[summary.exerciseId] case final exercise?)
-                          _ExerciseSummary(
-                            exercise: exercise,
-                            summary: summary,
-                            style: style,
-                          ),
-                    ],
+            final map = {
+              for (final row in items)
+                if (!row.exercise.archived) row.exercise.id: row.exercise,
+            };
+            final recentByDay = <CalendarDay, List<Entry>>{};
+            for (final entry in data.recent) {
+              if (map.containsKey(entry.exerciseId)) {
+                (recentByDay[entry.day] ??= []).add(entry);
+              }
+            }
+            return ResponsiveSplit(
+              main: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SectionTitle(
+                    'Your exercises',
+                    action: QuietButton(
+                      'Manage',
+                      () => context.push('/exercises'),
+                    ),
                   ),
-                  side: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SectionTitle(
-                        'Recent activity',
-                        action: QuietButton(
-                          'View history',
-                          () => context.go('/history'),
-                        ),
+                  for (final summary in data.exercises)
+                    if (map[summary.exerciseId] case final exercise?)
+                      _ExerciseSummary(
+                        exercise: exercise,
+                        summary: summary,
+                        style: style,
                       ),
-                      for (final group in recentByDay.entries) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(top: Space.sm),
-                          child: Text(
-                            fullDay(group.key),
-                            style: context.type.bodySmall,
-                          ),
-                        ),
-                        for (final entry in group.value)
-                          EntryRow(
-                            key: ValueKey(entry.id),
-                            entry: entry,
-                            exercise: map[entry.exerciseId]!,
-                            compact: true,
-                          ),
-                      ],
-                    ],
+                ],
+              ),
+              side: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SectionTitle(
+                    'Recent activity',
+                    action: QuietButton(
+                      'View history',
+                      () => context.go('/history'),
+                    ),
                   ),
-                );
-              },
+                  for (final group in recentByDay.entries) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: Space.sm),
+                      child: Text(
+                        fullDay(group.key),
+                        style: context.type.bodySmall,
+                      ),
+                    ),
+                    for (final entry in group.value)
+                      EntryRow(
+                        key: ValueKey(entry.id),
+                        entry: entry,
+                        exercise: map[entry.exerciseId]!,
+                        compact: true,
+                      ),
+                  ],
+                ],
+              ),
             );
           },
         ),
       ],
     );
   }
+}
+
+class _ProfileButton extends ConsumerWidget {
+  const _ProfileButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(profileProvider).value;
+    final colors = context.colors;
+    return IconButton(
+      tooltip: 'Profile',
+      onPressed: () => context.push('/profile'),
+      style: IconButton.styleFrom(
+        backgroundColor: colors.input,
+        foregroundColor: colors.ink,
+        side: BorderSide(color: colors.border),
+        shape: const CircleBorder(),
+        padding: EdgeInsets.zero,
+        fixedSize: const Size.square(Space.target),
+      ),
+      icon: ProfileAvatar(
+        size: 38,
+        photo: profile?.photo,
+        preset: profile?.avatarPreset ?? AvatarPreset.anonymous,
+        fallback: Image.asset(
+          'assets/avatars/anonymous.webp',
+          fit: BoxFit.cover,
+        ),
+      ),
+    );
+  }
+}
+
+class _OverviewSectionSkeleton extends StatelessWidget {
+  const _OverviewSectionSkeleton({
+    required this.headingWidth,
+    required this.rows,
+  });
+
+  final double headingWidth;
+  final SkeletonRows rows;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      SizedBox(
+        height: Space.target,
+        child: Center(
+          widthFactor: 1,
+          child: SkeletonText(
+            width: headingWidth,
+            style: context.type.titleLarge,
+          ),
+        ),
+      ),
+      rows,
+    ],
+  );
+}
+
+class _FirstResult extends StatelessWidget {
+  const _FirstResult({required this.hasExercises});
+
+  final bool hasExercises;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: AlignmentDirectional.centerStart,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 445),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: Space.md),
+          const EmptyStateIllustration(
+            'assets/brand/first-result.webp',
+            maxWidth: 360,
+            aspectRatio: 1080 / 455,
+          ),
+          EmptyBlock(
+            title: 'Start with one result.',
+            message:
+                'Log a set to see your latest result and track how it changes.',
+            action: 'Log your first result',
+            onAction: () => showLogSheet(context),
+            secondary: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                QuietButton(
+                  'Import a backup',
+                  () => context.push('/transfer/backup'),
+                ),
+                if (hasExercises)
+                  QuietButton(
+                    'Manage exercises',
+                    () => context.push('/exercises'),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _ExerciseSummary extends StatelessWidget {

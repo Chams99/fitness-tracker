@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
 import '../goals/goal_page.dart';
@@ -115,52 +116,59 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
       search: '',
     ));
     final style = ref.watch(durationProvider);
+    final goalData = exercise != null && !exercise.archived
+        ? ref.watch(goal)
+        : null;
+    final lifetime = exercise != null && !exercise.archived
+        ? ref.watch(all)
+        : null;
+    final records = exercise != null && !exercise.archived
+        ? ref.watch(entries)
+        : null;
 
-    return Scaffold(
-      appBar: secondaryBar(
-        context,
-        actions: [
-          if (exercise != null)
-            PopupMenuButton<String>(
-              tooltip: 'Exercise options',
-              enabled: !_busy,
-              icon: const Icon(LucideIcons.ellipsis, size: 20),
-              onSelected: (choice) async {
-                if (choice == 'edit') {
-                  await openExerciseEditor(context, item: item);
-                } else if (choice == 'delete') {
-                  await _delete(exercise);
-                } else {
-                  await _archive(exercise);
-                }
-              },
-              itemBuilder: (_) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Text('Edit exercise'),
+    return CollapsingPage(
+      title: exercise?.name,
+      actions: [
+        if (exercise != null)
+          PopupMenuButton<String>(
+            tooltip: 'Exercise options',
+            enabled: !_busy,
+            icon: const Icon(LucideIcons.ellipsis, size: 20),
+            onSelected: (choice) async {
+              if (choice == 'edit') {
+                await openExerciseEditor(context, item: item);
+              } else if (choice == 'delete') {
+                await _delete(exercise);
+              } else {
+                await _archive(exercise);
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'edit', child: Text('Edit exercise')),
+              PopupMenuItem(
+                value: 'archive',
+                child: Text(
+                  exercise.archived ? 'Restore exercise' : 'Archive exercise',
                 ),
-                PopupMenuItem(
-                  value: 'archive',
-                  child: Text(
-                    exercise.archived ? 'Restore exercise' : 'Archive exercise',
-                  ),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Text(
+                  'Delete exercise',
+                  style: TextStyle(color: context.colors.danger),
                 ),
-                PopupMenuItem(
-                  value: 'delete',
-                  child: Text(
-                    'Delete exercise',
-                    style: TextStyle(color: context.colors.danger),
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
-      body: ScreenScroll(
+              ),
+            ],
+          ),
+      ],
+      body: (controller, titleKey, _) => ScreenScroll(
+        controller: controller,
         width: 1100,
         children: [
           AsyncPanel(
             catalog,
+            loadingLabel: 'Loading exercise',
+            loading: const PerformanceSkeleton(),
             retry: () => ref.invalidate(catalogProvider),
             builder: (_) {
               if (exercise == null) {
@@ -174,6 +182,7 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
                 children: [
                   ScreenHeading(
                     exercise.name,
+                    titleKey: titleKey,
                     leading: ExerciseIcon(exercise.name, size: 40),
                     top: 0,
                     subtitle:
@@ -187,6 +196,9 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
                     PerformanceView(
                       exercise: exercise,
                       range: selectionBounds(_range, today),
+                      onResetRange: _range == allTime
+                          ? null
+                          : () => setState(() => _range = allTime),
                       rangeAction: FilterButton(_range.preset.label, () async {
                         final selected = await selectRange(
                           context,
@@ -201,10 +213,14 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
                     const SizedBox(height: 16),
                     const Divider(),
                     AsyncPanel(
-                      ref.watch(goal),
+                      goalData!,
+                      loadingLabel: 'Loading goal',
+                      loading: const SkeletonRows(count: 1),
                       retry: () => ref.invalidate(goal),
                       builder: (g) => AsyncPanel(
-                        ref.watch(all),
+                        lifetime!,
+                        loadingLabel: 'Loading goal progress',
+                        loading: const SkeletonRows(count: 1),
                         retry: () => ref.invalidate(all),
                         builder: (data) => GoalSummary(
                           exercise: exercise,
@@ -220,7 +236,9 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
                     const SizedBox(height: 14),
                     SectionTitle('Recorded activity', key: _entryHeading),
                     AsyncPanel(
-                      ref.watch(entries),
+                      records!,
+                      loadingLabel: 'Loading recorded activity',
+                      loading: const SkeletonRows(count: 2, rowHeight: 75),
                       retry: () => ref.invalidate(entries),
                       builder: (records) => Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,13 +280,16 @@ class _ExerciseDetailState extends ConsumerState<ExerciseDetail> {
           ),
         ],
       ),
-      bottomNavigationBar: exercise == null
+      footer: exercise == null
           ? null
           : KeyboardFooter(
               child: ActionFooter(
                 width: 1100,
                 label: exercise.archived ? 'Restore exercise' : 'Add entry',
                 busy: _busy,
+                busyLabel: exercise.archived
+                    ? 'Restoring…'
+                    : 'Updating exercise…',
                 onPressed: exercise.archived
                     ? () => _archive(exercise)
                     : () => showLogSheet(

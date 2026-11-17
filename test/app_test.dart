@@ -8,12 +8,16 @@ import 'package:fitness_tracker/core/database/tracker_repository.dart';
 import 'package:fitness_tracker/core/platform/device_services.dart';
 import 'package:fitness_tracker/features/data_transfer/transfer_codec.dart'
     show activityExample, activityKey;
+import 'package:fitness_tracker/features/profile/profile_avatar.dart';
 import 'package:fitness_tracker/features/profile/profile_page.dart';
 import 'package:fitness_tracker/features/progress/performance_chart.dart'
     show PerformanceChart, Sparkline;
+import 'package:fitness_tracker/features/progress/progress_page.dart'
+    show PerformanceSkeleton;
 import 'package:fitness_tracker/main.dart';
 import 'package:fitness_tracker/shared/domain/body_metrics.dart';
 import 'package:fitness_tracker/shared/domain/training.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -302,7 +306,7 @@ void main() {
       final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
       try {
         await _pumpApp(tester, repo);
-        await tapText(tester, 'Record your first result');
+        await tapText(tester, 'Log your first result');
         await tapText(tester, 'Create exercise');
         await tester.enterText(find.byType(TextField), 'Squats');
         await tapText(tester, 'Create exercise');
@@ -459,7 +463,7 @@ void main() {
       try {
         await _pumpApp(tester, repo, feedback: feedback);
         expect(find.text('Start with one result.'), findsOneWidget);
-        await tapText(tester, 'Record your first result');
+        await tapText(tester, 'Log your first result');
         expect(find.byType(BottomSheet), findsOneWidget);
         await tapText(tester, 'Push-ups');
         await tapText(tester, 'Save 1 set');
@@ -536,7 +540,7 @@ void main() {
         addTearDown(tester.view.resetViewPadding);
         addTearDown(tester.view.resetViewInsets);
         await _pumpApp(tester, repo);
-        await tapText(tester, 'Record your first result');
+        await tapText(tester, 'Log your first result');
         await tapText(tester, 'Pull-ups');
         final input = find.byType(TextFormField).first;
         await tester.enterText(input, '12');
@@ -607,7 +611,7 @@ void main() {
     await repo.createExercise('Plank', Measurement.duration, trackSets: true);
     try {
       await _pumpApp(tester, repo);
-      await tapText(tester, 'Record your first result');
+      await tapText(tester, 'Log your first result');
       await tapText(tester, 'Push-ups');
       expect(
         tester
@@ -665,7 +669,7 @@ void main() {
       );
       try {
         await _pumpApp(tester, repo);
-        await tapText(tester, 'Record your first result');
+        await tapText(tester, 'Log your first result');
         await tapText(tester, 'Create exercise');
         await tester.enterText(find.byType(TextField).first, 'Pull-ups');
         expect(
@@ -705,7 +709,7 @@ void main() {
     );
     try {
       await _pumpApp(tester, repo);
-      await tapText(tester, 'Record your first result');
+      await tapText(tester, 'Log your first result');
       await tapText(tester, 'Create exercise');
       await tester.enterText(find.byType(TextField).first, 'Bench press');
       await tapText(tester, 'Weight + reps');
@@ -757,6 +761,13 @@ void main() {
         await _pumpApp(tester, repo);
         await _openActivityPreview(tester);
 
+        final compactTitle = find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Import from AI chat'),
+        );
+        expect(compactTitle, findsOneWidget);
+        expect(visibleText('Import preview'), findsOneWidget);
+        expect(visibleText('Confirm import'), findsOneWidget);
         expect(find.byType(Sparkline), findsNWidgets(4));
         expect(find.textContaining('Latest 18 reps'), findsOneWidget);
         expect(
@@ -878,6 +889,98 @@ void main() {
   });
 
   testWidgets(
+    'Progress keeps one first-load placeholder and preserves filters on range changes',
+    (tester) async {
+      final repo = TrackerRepository(
+        TrackerDatabase(NativeDatabase.memory()),
+        now: () => fixedNow,
+      );
+      final exercise = await repo.createExercise(
+        'Push-ups',
+        Measurement.repetitions,
+      );
+      final today = CalendarDay.fromDate(fixedNow);
+      await repo.log([
+        EntryDraft(
+          exerciseId: exercise.id,
+          day: today,
+          sets: [(id: null, value: 18, reps: null)],
+        ),
+      ]);
+      final data = await repo
+          .watchPerformance(exercise.id, RangePreset.all.boundaries(today))
+          .first;
+      final catalog = Completer<List<CatalogItem>>();
+      final selection = Completer<String?>();
+      final firstRead = Completer<Performance>();
+      final nextRead = Completer<Performance>();
+
+      try {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              repositoryProvider.overrideWithValue(repo),
+              nowProvider.overrideWithValue(() => fixedNow),
+              catalogProvider.overrideWith(
+                (_) => Stream.fromFuture(catalog.future),
+              ),
+              progressExerciseProvider.overrideWith(
+                (_) => Stream.fromFuture(selection.future),
+              ),
+              performanceProvider.overrideWith(
+                (_, query) => Stream.fromFuture(
+                  (query.$2.start == null ? firstRead : nextRead).future,
+                ),
+              ),
+            ],
+            child: const FitnessApp(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tapText(tester, 'Progress');
+        final skeleton = find.byType(PerformanceSkeleton);
+        final initialPosition = tester.getTopLeft(skeleton);
+
+        catalog.complete(await repo.watchCatalog().first);
+        await tester.pumpAndSettle();
+        expect(tester.getTopLeft(skeleton), initialPosition);
+        selection.complete(exercise.id);
+        await tester.pumpAndSettle();
+        expect(tester.getTopLeft(skeleton), initialPosition);
+        expect(visibleText('All time'), findsNothing);
+
+        firstRead.complete(data);
+        await tester.idle();
+        await tester.pump();
+        expect(tester.getTopLeft(skeleton), initialPosition);
+        expect(find.byType(PerformanceChart), findsWidgets);
+        await tester.pumpAndSettle();
+        expect(skeleton, findsNothing);
+        expect(visibleText('18 reps'), findsWidgets);
+        final filterPosition = tester.getTopLeft(visibleText('All time'));
+        await tapText(tester, 'All time');
+        await tapText(tester, 'Last 7 days');
+        await tapText(tester, 'Apply range');
+        expect(tester.getTopLeft(visibleText('Last 7 days')), filterPosition);
+        expect(skeleton, findsOneWidget);
+        expect(find.byType(PerformanceChart), findsNothing);
+
+        nextRead.complete(data);
+        await tester.idle();
+        await tester.pump();
+        expect(tester.getTopLeft(visibleText('Last 7 days')), filterPosition);
+        expect(skeleton, findsOneWidget);
+        expect(find.byType(PerformanceChart), findsWidgets);
+        await tester.pumpAndSettle();
+        expect(skeleton, findsNothing);
+        expect(visibleText('18 reps'), findsWidgets);
+      } finally {
+        await clean(tester, repo);
+      }
+    },
+  );
+
+  testWidgets(
     'Progress restores the chosen exercise when the app opens again',
     (tester) async {
       final repo = TrackerRepository(
@@ -995,6 +1098,387 @@ void main() {
       await clean(tester, repo);
     }
   });
+
+  testWidgets(
+    'Exercise Detail moves its name into the pinned toolbar and back',
+    (tester) async {
+      final repo = TrackerRepository(
+        TrackerDatabase(NativeDatabase.memory()),
+        now: () => fixedNow,
+      );
+      final semantics = tester.ensureSemantics();
+      try {
+        final exercise = await repo.createExercise(
+          'Demo squats',
+          Measurement.repetitions,
+        );
+        await repo.log([
+          for (var i = 0; i < 8; i++)
+            EntryDraft(
+              exerciseId: exercise.id,
+              day: CalendarDay.fromDate(fixedNow).plusDays(-i),
+              sets: [(id: null, value: 15, reps: null)],
+            ),
+        ]);
+        await _pumpApp(tester, repo, height: 640, scale: 1.6);
+        await tapText(tester, 'Demo squats');
+        final title = find.descendant(
+          of: find.byType(AppBar),
+          matching: find.text('Demo squats'),
+        );
+        final scroll = tester.state<ScrollableState>(
+          find.byType(Scrollable).first,
+        );
+        final back = find.byTooltip('Back');
+        final options = find.byTooltip('Exercise options');
+        final backPosition = tester.getTopLeft(back);
+        final optionsPosition = tester.getTopLeft(options);
+        expect(title, findsNothing);
+
+        scroll.position.jumpTo(160);
+        await tester.pumpAndSettle();
+        expect(scroll.position.pixels, 160);
+        expect(title, findsOneWidget);
+        expect(
+          tester.semantics.simulatedAccessibilityTraversal().map(
+            (node) => node.label,
+          ),
+          contains('Demo squats'),
+        );
+        expect(tester.getTopLeft(back), backPosition);
+        expect(tester.getTopLeft(options), optionsPosition);
+
+        scroll.position.jumpTo(0);
+        await tester.pumpAndSettle();
+        expect(title, findsNothing);
+        await tester.tap(back);
+        await tester.pumpAndSettle();
+        expect(back, findsNothing);
+        expect(visibleText('Overview'), findsWidgets);
+      } finally {
+        semantics.dispose();
+        await clean(tester, repo);
+      }
+    },
+  );
+
+  for (final reducedMotion in [false, true]) {
+    testWidgets(
+      'Profile shows its title beside Back before the avatar docks with Reduce Motion ${reducedMotion ? 'on' : 'off'}',
+      (tester) async {
+        final repo = TrackerRepository(
+          TrackerDatabase(NativeDatabase.memory()),
+          now: () => fixedNow,
+        );
+        try {
+          await _pumpApp(
+            tester,
+            repo,
+            height: 640,
+            reducedMotion: reducedMotion,
+          );
+          await tester.tap(find.byTooltip('Profile'));
+          await tester.pumpAndSettle();
+          final avatar = find.byType(ProfileAvatar);
+          final scroll = tester.state<ScrollableState>(
+            find.byType(Scrollable).first,
+          );
+          final appBar = tester.getRect(find.byType(AppBar));
+          final toolbarTitle = find
+              .descendant(
+                of: find.byType(AppBar),
+                matching: find.text('Profile'),
+              )
+              .hitTestable();
+          final headingEnd =
+              tester.getBottomLeft(visibleText('Profile')).dy - appBar.bottom;
+          final expanded = tester.getRect(avatar);
+          expect(expanded.width, 74);
+          expect(expanded.top, greaterThan(appBar.bottom));
+          expect(find.text('Edit profile').hitTestable(), findsOneWidget);
+          expect(toolbarTitle, findsNothing);
+
+          scroll.position.jumpTo(headingEnd - 10);
+          await tester.pump();
+          expect(toolbarTitle, reducedMotion ? findsNothing : findsOneWidget);
+
+          scroll.position.jumpTo(headingEnd + 4);
+          await tester.pump();
+          expect(toolbarTitle, findsOneWidget);
+          final titleWhileMoving = tester.getRect(toolbarTitle);
+          final moving = tester.getRect(avatar);
+          expect(
+            moving.width,
+            reducedMotion ? 74.0 : inExclusiveRange(32.0, 74.0),
+          );
+
+          scroll.position.jumpTo(154);
+          await tester.pumpAndSettle();
+          final compact = tester.getRect(avatar);
+          expect(compact.width, closeTo(32, 0.001));
+          expect(appBar.contains(compact.center), isTrue);
+          expect(tester.getRect(toolbarTitle), titleWhileMoving);
+          expect(
+            compact.left,
+            closeTo(
+              appBar.left +
+                  tester.widget<AppBar>(find.byType(AppBar)).leadingWidth!,
+              0.01,
+            ),
+          );
+          expect(titleWhileMoving.left, closeTo(compact.right + 8, 0.01));
+          expect(avatar, findsOneWidget);
+
+          scroll.position.jumpTo(0);
+          await tester.pumpAndSettle();
+          expect(tester.getRect(avatar), expanded);
+          expect(toolbarTitle, findsNothing);
+        } finally {
+          await clean(tester, repo);
+        }
+      },
+    );
+  }
+
+  testWidgets(
+    'Overview keeps the Profile button in place as the saved avatar changes',
+    (tester) async {
+      final repo = TrackerRepository(TrackerDatabase(NativeDatabase.memory()));
+      try {
+        final asset = await tester.runAsync(
+          () => rootBundle.load('assets/brand/mark.png'),
+        );
+        final photo = asset!.buffer.asUint8List(
+          asset.offsetInBytes,
+          asset.lengthInBytes,
+        );
+        await _pumpApp(tester, repo);
+        final button = find.byTooltip('Profile').hitTestable();
+        final avatar = find.descendant(
+          of: button,
+          matching: find.byType(ProfileAvatar),
+        );
+        final bounds = tester.getRect(button);
+        expect(bounds.size, const Size.square(48));
+        expect(
+          tester.widget<ProfileAvatar>(avatar).preset,
+          AvatarPreset.anonymous,
+        );
+        final defaultImage = find.descendant(
+          of: avatar,
+          matching: find.byType(Image),
+        );
+        expect(
+          tester.widget<Image>(defaultImage).image,
+          isA<AssetImage>().having(
+            (image) => image.assetName,
+            'asset name',
+            'assets/avatars/anonymous.webp',
+          ),
+        );
+
+        await repo.saveProfileAvatar(AvatarPreset.strength);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ProfileAvatar>(avatar).preset,
+          AvatarPreset.strength,
+        );
+        expect(tester.getRect(button), bounds);
+
+        await repo.saveProfilePhoto(photo);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ProfileAvatar>(avatar).photo,
+          orderedEquals(photo),
+        );
+        expect(tester.getRect(button), bounds);
+
+        await tester.tapAt(Offset(bounds.right - 2, bounds.center.dy));
+        await tester.pumpAndSettle();
+        expect(visibleText('Edit profile'), findsOneWidget);
+      } finally {
+        await clean(tester, repo);
+      }
+    },
+  );
+
+  testWidgets(
+    'Profile keeps actions and preferences in place while profile and weight load',
+    (tester) async {
+      final repo = TrackerRepository(
+        TrackerDatabase(NativeDatabase.memory()),
+        now: () => fixedNow,
+      );
+      final profile = Completer<LocalProfile>();
+      final weighIns = Completer<List<WeighIn>>();
+      var startedWeightRead = false;
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(390, 990);
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      try {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              repositoryProvider.overrideWithValue(repo),
+              profileProvider.overrideWith(
+                (_) => Stream.fromFuture(profile.future),
+              ),
+              weighInsProvider.overrideWith((_, _) {
+                startedWeightRead = true;
+                return Stream.fromFuture(weighIns.future);
+              }),
+            ],
+            child: const FitnessApp(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Profile'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
+        final preferences = find.text('Preferences');
+        final logWeight = visibleText('Log weight');
+        final avatar = find.descendant(
+          of: find.byType(ProfilePage),
+          matching: find.byType(ProfileAvatar),
+        );
+        final preferencesPosition = tester.getTopLeft(preferences);
+        final actionPosition = tester.getTopLeft(logWeight);
+        expect(startedWeightRead, isTrue);
+        expect(find.text('No weigh-ins yet'), findsNothing);
+        expect(avatar, findsNothing);
+
+        profile.complete(
+          const LocalProfile(
+            defaultProfileDetails,
+            null,
+            AvatarPreset.anonymous,
+          ),
+        );
+        await tester.idle();
+        await tester.pump();
+        expect(avatar, findsOneWidget);
+        expect(find.bySemanticsLabel('Loading profile'), findsNothing);
+        expect(
+          find.bySemanticsLabel(RegExp('Loading Body weight')),
+          findsOneWidget,
+        );
+        expect(tester.getTopLeft(preferences), preferencesPosition);
+        expect(tester.getTopLeft(logWeight), actionPosition);
+
+        weighIns.complete([
+          (day: CalendarDay.fromDate(fixedNow), grams: 70400),
+        ]);
+        await tester.idle();
+        await tester.pump();
+        expect(visibleText('70.4 kg'), findsOneWidget);
+        expect(visibleText('12 Nov 2026'), findsOneWidget);
+        expect(tester.getTopLeft(preferences), preferencesPosition);
+        expect(tester.getTopLeft(logWeight), actionPosition);
+      } finally {
+        await clean(tester, repo);
+      }
+    },
+    variant: const TargetPlatformVariant({
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+    }),
+  );
+
+  testWidgets(
+    'Weight History keeps existing rows in place until the next page arrives',
+    (tester) async {
+      final repo = TrackerRepository(
+        TrackerDatabase(NativeDatabase.memory()),
+        now: () => fixedNow,
+      );
+      final nextPage = Completer<List<WeighIn>>();
+      final today = CalendarDay.fromDate(fixedNow);
+      final records = [
+        for (var i = 0; i < 32; i++)
+          (day: today.plusDays(-i), grams: 70000 + i * 10),
+      ];
+      try {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              repositoryProvider.overrideWithValue(repo),
+              weighInsProvider.overrideWith(
+                (_, filter) => switch (filter.limit) {
+                  31 => Stream.value(records.take(31).toList()),
+                  61 => Stream.fromFuture(nextPage.future),
+                  1 => Stream.value([records.first]),
+                  _ => Stream.value(records),
+                },
+              ),
+            ],
+            child: const FitnessApp(),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Profile'));
+        await tester.pumpAndSettle();
+        await tapText(tester, 'Body weight');
+        final more = find.text('Load more');
+        await tester.scrollUntilVisible(more, 500, maxScrolls: 20);
+        await tester.ensureVisible(more);
+        await tester.pumpAndSettle();
+        final lastVisibleRecord = find.text('14 Oct 2026');
+        final firstNewRecord = find.text('13 Oct 2026');
+        final before = tester.getTopLeft(lastVisibleRecord);
+        await tester.tap(more);
+        await tester.pump();
+        expect(find.text('Loading more…'), findsOneWidget);
+        expect(firstNewRecord, findsNothing);
+        expect(tester.getTopLeft(lastVisibleRecord), before);
+        nextPage.complete(records);
+        await tester.pumpAndSettle();
+        expect(firstNewRecord, findsOneWidget);
+        expect(tester.getTopLeft(lastVisibleRecord), before);
+      } finally {
+        await clean(tester, repo);
+      }
+    },
+  );
+
+  testWidgets(
+    'History can clear a search and show the selected day’s records again',
+    (tester) async {
+      final repo = TrackerRepository(
+        TrackerDatabase(NativeDatabase.memory()),
+        now: () => fixedNow,
+      );
+      final exercise = await repo.createExercise(
+        'Push-ups',
+        Measurement.repetitions,
+      );
+      final today = CalendarDay.fromDate(fixedNow);
+      await repo.log([
+        EntryDraft(
+          exerciseId: exercise.id,
+          day: today,
+          sets: [(id: null, value: 18, reps: null)],
+        ),
+      ]);
+      try {
+        await _pumpApp(tester, repo, height: 1000);
+        await tapText(tester, 'History');
+        await tester.tap(find.byTooltip('Search history'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField), 'no such exercise');
+        await tester.pumpAndSettle();
+        expect(visibleText('No matches'), findsOneWidget);
+        expect(visibleText('Thursday, 12 November'), findsOneWidget);
+        await tapText(tester, 'Clear search');
+        expect(visibleText('Push-ups'), findsOneWidget);
+        expect(visibleText('Thursday, 12 November'), findsOneWidget);
+      } finally {
+        await clean(tester, repo);
+      }
+    },
+  );
 
   testWidgets(
     'Profile and weight entry fit a compact Android viewport with large text',

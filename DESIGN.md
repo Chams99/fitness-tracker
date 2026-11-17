@@ -62,7 +62,7 @@ Use an 8-unit spacing rhythm, with 4-unit adjustments for closely related text.
 
 Use 20–24 units of horizontal screen padding, reducing to 16 only when a compact width requires it. Align headings, chart edges, and list content to the same grid. Keep related labels closer to their values than to the next section.
 
-Most content has no container background. Small inputs can have 8–12 unit corners; main action buttons can use 12–16. Reserve fully rounded shapes for the specified navigation capsule, its selected tab, and the circular Add button. A single subtle shadow may separate floating navigation from content; ordinary rows and charts do not need shadows.
+Most content has no container background. Small inputs can have 8–12 unit corners; main action buttons can use 12–16. Reserve fully rounded shapes for the navigation capsule, its selected tab, and the circular Add and Profile buttons. A single subtle shadow may separate floating navigation from content; ordinary rows and charts do not need shadows.
 
 ## Navigation
 
@@ -75,7 +75,11 @@ The bottom navigation consists of two physically separate elements:
 
 Start with a 56-unit height, a 12-unit gap, and approximately 20-unit outer margins. Place both elements above the bottom safe area. Add content padding so the final row can scroll clear of them. Preserve the two-element composition on narrow screens and with larger text; do not replace it with a conventional full-width tab bar.
 
+Overview places the Profile button beside the page heading. Show the saved avatar in a 48-unit circular button with a neutral border. Keep the Profile label for assistive technology and show the bundled Default avatar image while a saved image loads or when no other avatar is set.
+
 Secondary pages use platform navigation. Add entry uses a sheet with a Back action between steps, including exercise creation. The sheet closes on a downward drag or outside tap and asks before discarding a draft. Focused forms have one clear save action.
+
+Full-screen secondary pages use a large heading that gives way to a compact toolbar title as it scrolls offscreen. Back and toolbar actions stay pinned. On Profile, place the compact title and avatar beside Back. Fade the title in as the large heading leaves view, and let the avatar finish shrinking into place as scrolling continues. Let short pages fit naturally. With Reduce Motion, switch each element at its scroll position without fading or moving it across the screen.
 
 ## Component rules
 
@@ -130,6 +134,7 @@ Use **Latest set** and **Best set** as two views of the same performance chart. 
 - Plot the last set per recorded date in Latest set mode and the day's maximum in Best set mode. Keep all individual attempts accessible in History.
 - Use a thin solid green line and visible recorded points. Do not fill the area with a gradient.
 - A selected point shows the exact date, value, and unit. Provide an accessible text/list alternative to touch selection.
+- On performance and daily volume charts, tap or drag horizontally across the plot to select the nearest recorded date. Keep the last selection when the gesture ends and let vertical swipes scroll the page.
 - Lines connect observations; they do not create intermediate records. Missing dates remain gaps without zero-valued marks.
 - Keep y-axis labels readable and use a zero baseline for volume bars. Avoid smoothed curves that exaggerate peaks or declines.
 - Apply 7-day, 30-day, 90-day, last-year, all-time, and inclusive custom filters to all range statistics.
@@ -139,7 +144,27 @@ Use **Latest set** and **Best set** as two views of the same performance chart. 
 
 Use immediate visual press feedback and restrained native transitions. A short 150–220 ms transition is a starting point for changing views. Respect reduced-motion settings. Haptic feedback can confirm a saved entry, but should not accompany every field tap.
 
-Use honest empty, loading, and error states. Empty history should say there are no records for that date or range and offer an appropriate action. A save failure retains the draft and offers Retry. Do not display sample values in a real empty account.
+### Loading and refresh
+
+Render headings, navigation, filters, and actions as soon as they are available. Start independent reads together. Reserve space for pending values inside the layout that will display them, including at larger text sizes. Paint quiet static skeletons from the first pending frame. Shape them like the expected rows, chart, avatar, or illustration. When content arrives, show it on the first resolved frame and fade out the skeleton over 180 ms. Overview and Progress render ready content at full opacity and fade the colors of the outgoing skeleton. Use `AsyncPanel` for provider-backed regions and `SkeletonCrossfade` for individual fields or images. Skip the animation when Reduce Motion is enabled.
+
+Keep valid content and the scroll position during refresh and pagination. When the selected date, exercise, or range changes, replace the affected results in place with a placeholder for that query. Keep the controls available and only show values that match the selected query. Skeletons are decorative. Give each pending region a short accessible label.
+
+If the first view needs several reads, keep one placeholder until its content is ready. On Progress, reveal the exercise and date filters with the first result, then keep the filters visible for later reads. Reveal the default avatar with the profile and keep a visible fallback while other avatar images decode.
+
+Use inline progress for actions such as saving or importing. Keep the control in place, give it a status label such as “Saving…”, and prevent duplicate submission. Use a static indicator when Reduce Motion is enabled. Preserve the draft on failure and offer a retry close to the affected content.
+
+On Android, show the optional update dialog after Overview opens. Show the version and download size before the user chooses Update. Show download progress and recovery actions on the App update page. Keep the download running if the user leaves the page. Use a tappable status row below the Overview heading to reopen update details. Draw download progress along the row’s bottom divider, and show a plain divider when the update is ready. Place Check for updates below the version in Android Profile. A manual check can reopen an active update or offer a release again after the user chooses Later. Explain the source permission only when the user chooses Install, and use Android’s own confirmation for the update.
+
+Use the native splash for app startup. Show “Opening your records…” if the app is still opening local storage when the native splash hands off.
+
+### Empty states
+
+Show first-use guidance only after the app confirms there are no records. Explain what will appear and give people one clear next action, such as logging their first result. Overview pairs that action with a dedicated workout illustration in the app’s palette. Keep it decorative and compact so the action stays visible on a small screen. Offer backup import as a secondary action on Overview. Leave personal details and weigh-ins optional.
+
+Align the first-use blocks on Overview and Progress to the same page margin. Progress can sit lower under its heading. Its notebook illustration shows blank graph paper so it cannot be mistaken for recorded activity.
+
+Use compact, contextual messages for an empty day, a date range without activity, or a search with no matches. Offer a relevant action such as adding to the selected day, widening the range, or clearing the search. Keep empty, loading, and error states distinct and show only actual recorded values.
 
 Support screen readers, logical focus order, increased text sizes, and clear focus indicators. State selected tabs and dates programmatically. Never rely on color alone to distinguish selection, progress, or errors.
 

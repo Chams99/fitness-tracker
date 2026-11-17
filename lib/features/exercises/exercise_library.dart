@@ -7,6 +7,7 @@ import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../core/database/tracker_repository.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/draft_sheet.dart';
 import '../../shared/widgets/exercise_icon.dart';
 import '../../shared/widgets/ui.dart';
@@ -43,6 +44,14 @@ enum _ExerciseAction { archive, restore, delete }
 
 class _ExerciseLibraryState extends ConsumerState<ExerciseLibrary> {
   var _search = '';
+  final _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   final _busy = <String>{};
 
   Future<void> _manage(Exercise exercise, _ExerciseAction action) async {
@@ -145,68 +154,91 @@ class _ExerciseLibraryState extends ConsumerState<ExerciseLibrary> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: secondaryBar(context),
-    body: ScreenScroll(
-      children: [
-        AsyncPanel(
-          ref.watch(catalogProvider),
-          retry: () => ref.invalidate(catalogProvider),
-          builder: (items) {
-            final active = items.where((i) => !i.exercise.archived).length;
-            final matches = items
-                .where((i) => normalizeName(i.exercise.name).contains(_search))
-                .toList();
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ScreenHeading(
-                  'Exercises',
-                  top: 0,
-                  subtitle:
-                      '$active active · ${items.length - active} archived',
-                  action: QuietButton(
-                    'New',
-                    () => openExerciseEditor(context),
-                    icon: LucideIcons.plus,
-                  ),
-                ),
-                SearchInput(
-                  hint: 'Search exercises',
-                  onChanged: (input) =>
-                      setState(() => _search = normalizeName(input)),
-                ),
-                const SizedBox(height: 12),
-                if (matches.isEmpty)
-                  EmptyBlock(
-                    title: items.isEmpty
-                        ? 'Build your exercise list'
-                        : 'No matching exercises',
-                    message: items.isEmpty
-                        ? 'Create an exercise to start tracking results.'
-                        : 'Try another exercise name.',
-                  ),
-                for (final item in matches.where((i) => !i.exercise.archived))
-                  _row(item),
-                if (matches.any((i) => i.exercise.archived)) ...[
-                  const SizedBox(height: 24),
-                  const SectionTitle('Archived'),
-                  const SizedBox(height: 5),
-                  for (final item in matches.where((i) => i.exercise.archived))
+  Widget build(BuildContext context) {
+    final catalog = ref.watch(catalogProvider);
+    final items = catalog.value;
+    final active = items?.where((item) => !item.exercise.archived).length;
+    void create() => openExerciseEditor(context);
+    return CollapsingPage(
+      title: 'Exercises',
+      body: (controller, titleKey, _) => ScreenScroll(
+        controller: controller,
+        children: [
+          ScreenHeading(
+            'Exercises',
+            top: 0,
+            titleKey: titleKey,
+            subtitleLoading: !catalog.hasValue && !catalog.hasError,
+            subtitle: items == null
+                ? null
+                : '$active active · ${items.length - active!} archived',
+            action: QuietButton('New', create, icon: LucideIcons.plus),
+          ),
+          SearchInput(
+            controller: _searchController,
+            hint: 'Search exercises',
+            onChanged: (input) =>
+                setState(() => _search = normalizeName(input)),
+          ),
+          const SizedBox(height: 12),
+          AsyncPanel(
+            catalog,
+            loadingLabel: 'Loading exercises',
+            loading: const SkeletonRows(),
+            retry: () => ref.invalidate(catalogProvider),
+            builder: (items) {
+              final matches = items
+                  .where(
+                    (item) =>
+                        normalizeName(item.exercise.name).contains(_search),
+                  )
+                  .toList();
+              if (matches.isEmpty) {
+                return EmptyBlock(
+                  icon: items.isEmpty ? LucideIcons.dumbbell : null,
+                  title: items.isEmpty
+                      ? 'Build your exercise list'
+                      : 'No matching exercises',
+                  message: items.isEmpty
+                      ? 'Create an exercise to start tracking results.'
+                      : 'Try a different name, or show all exercises.',
+                  action: items.isEmpty ? 'Create exercise' : null,
+                  onAction: items.isEmpty ? create : null,
+                  secondary: items.isEmpty
+                      ? null
+                      : QuietButton('Clear search', () {
+                          _searchController.clear();
+                          setState(() => _search = '');
+                        }),
+                );
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final item in matches.where((i) => !i.exercise.archived))
                     _row(item),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Restore an exercise to see its history again.',
-                    style: context.type.bodySmall,
-                  ),
+                  if (matches.any((i) => i.exercise.archived)) ...[
+                    const SizedBox(height: 24),
+                    const SectionTitle('Archived'),
+                    const SizedBox(height: 5),
+                    for (final item in matches.where(
+                      (i) => i.exercise.archived,
+                    ))
+                      _row(item),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Restore an exercise to see its history again.',
+                      style: context.type.bodySmall,
+                    ),
+                  ],
                 ],
-              ],
-            );
-          },
-        ),
-      ],
-    ),
-  );
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 typedef ExerciseEditorLayout = Widget Function({

@@ -5,9 +5,10 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/body_metrics.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/ui.dart';
 import 'measurement_input.dart';
-import 'profile_page.dart';
+import 'profile_avatar.dart';
 
 class EditProfilePage extends ConsumerWidget {
   const EditProfilePage({super.key});
@@ -22,6 +23,15 @@ class EditProfilePage extends ConsumerWidget {
       children: [
         AsyncPanel(
           result,
+          loadingLabel: 'Loading profile',
+          loading: const Column(
+            children: [
+              SizedBox(height: Space.lg),
+              Skeleton(width: 74, height: 74, circular: true),
+              SizedBox(height: Space.xl),
+              SkeletonRows(rowHeight: 56),
+            ],
+          ),
           retry: () => ref.invalidate(profileProvider),
           builder: (_) => const SizedBox.shrink(),
         ),
@@ -292,7 +302,12 @@ class _ProfileEditorState extends ConsumerState<_ProfileEditor> {
                 QuietButton('Change avatar', choosing ? null : _changeAvatar),
               ],
             ),
-            if (_photoBusy) const LinearProgressIndicator(minHeight: 2),
+            ActionProgressLine(
+              busy: _photoBusy || recovery.isLoading,
+              label: _photoBusy
+                  ? 'Loading avatar photo'
+                  : 'Checking for an avatar photo',
+            ),
             FormProblem(
               _photoProblem ??
                   (recovery.hasError

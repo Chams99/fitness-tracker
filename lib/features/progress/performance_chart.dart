@@ -158,12 +158,19 @@ class _PerformanceChartState extends State<PerformanceChart> {
               metric,
               ceiling,
             );
+            void selectAt(double x) {
+              final day = frame.nearest(x).day;
+              if (_selected != day) setState(() => _selected = day);
+            }
+
             return GestureDetector(
               excludeFromSemantics: true,
               behavior: HitTestBehavior.opaque,
-              onTapUp: (details) => setState(
-                () => _selected = frame.nearest(details.localPosition.dx).day,
-              ),
+              onTapUp: (details) => selectAt(details.localPosition.dx),
+              onHorizontalDragStart: (details) =>
+                  selectAt(details.localPosition.dx),
+              onHorizontalDragUpdate: (details) =>
+                  selectAt(details.localPosition.dx),
               child: CustomPaint(
                 size: Size(width, height),
                 painter: _ChartPainter(
@@ -228,18 +235,19 @@ class _ChartFrame {
   Offset at(DailyResult day) => Offset(x(day.day), y(metric.read(day)));
   double y(int value) => rect.bottom - (value / ceiling * rect.height);
 
-  DailyResult nearest(double tap) {
+  DailyResult nearest(double position) {
     var low = 0, high = days.length - 1;
     while (low < high) {
       final middle = (low + high) ~/ 2;
-      if (x(days[middle].day) < tap) {
+      if (x(days[middle].day) < position) {
         low = middle + 1;
       } else {
         high = middle;
       }
     }
     if (low == 0) return days.first;
-    return (x(days[low].day) - tap).abs() < (x(days[low - 1].day) - tap).abs()
+    return (x(days[low].day) - position).abs() <
+            (x(days[low - 1].day) - position).abs()
         ? days[low]
         : days[low - 1];
   }

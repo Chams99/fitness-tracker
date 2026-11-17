@@ -9,6 +9,7 @@ import '../../app/providers.dart';
 import '../../app/theme.dart';
 import '../../shared/domain/body_metrics.dart';
 import '../../shared/domain/training.dart';
+import '../../shared/widgets/collapsing_page.dart';
 import '../../shared/widgets/ui.dart';
 import 'measurement_input.dart';
 
@@ -22,57 +23,78 @@ class WeightHistoryPage extends ConsumerStatefulWidget {
 class _WeightHistoryPageState extends ConsumerState<WeightHistoryPage> {
   static const _pageSize = 30;
   int _limit = _pageSize;
+  List<WeighIn>? _shown;
+
+  void _loadMore(List<WeighIn> records) => setState(() {
+    _shown = records.take(_limit).toList(growable: false);
+    _limit += _pageSize;
+  });
 
   @override
   Widget build(BuildContext context) {
-    final filter = (limit: _limit + 1, since: null);
-    final unit =
-        ref.watch(profileProvider).value?.details.weightUnit ?? WeightUnit.kg;
-    return Scaffold(
-      appBar: secondaryBar(context),
-      body: ScreenScroll(
+    final rows = weighInsProvider((limit: _limit + 1, since: null));
+    final latestRows = ref.watch(rows);
+    final profile = ref.watch(profileProvider);
+    final unit = profile.value?.details.weightUnit;
+    final visibleRows = latestRows.hasValue || _shown == null
+        ? latestRows
+        : AsyncData(_shown!);
+    final waitingForUnit =
+        unit == null && (visibleRows.value?.isNotEmpty ?? false);
+    final visible = waitingForUnit
+        ? profile.whenData((_) => visibleRows.requireValue)
+        : visibleRows;
+    void logWeight() => context.push('/profile/weigh-in');
+    return CollapsingPage(
+      title: 'Weight history',
+      body: (controller, titleKey, _) => ScreenScroll(
+        controller: controller,
         children: [
-          const ScreenHeading('Weight history', top: 0),
+          ScreenHeading(
+            'Weight history',
+            titleKey: titleKey,
+            top: 0,
+            action: QuietButton(
+              'Log weight',
+              logWeight,
+              icon: LucideIcons.plus,
+            ),
+          ),
           AsyncPanel(
-            ref.watch(weighInsProvider(filter)),
-            retry: () => ref.invalidate(weighInsProvider(filter)),
+            visible,
+            loadingLabel: 'Loading weigh-ins',
+            loading: const Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SkeletonRows(count: 1),
+                SizedBox(height: Space.md),
+                Skeleton(height: 196),
+                SizedBox(height: Space.lg),
+                SkeletonRows(count: 2),
+              ],
+            ),
+            retry: () => waitingForUnit
+                ? ref.invalidate(profileProvider)
+                : ref.invalidate(rows),
             builder: (records) {
               final latest = records.firstOrNull;
               if (latest == null) {
                 return EmptyBlock(
                   title: 'No weigh-ins yet',
                   message: 'Log your first weight to start a history.',
-                  action: 'Log weight',
-                  onAction: () => context.push('/profile/weigh-in'),
+                  icon: LucideIcons.scale,
                 );
               }
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Wrap(
-                    spacing: Space.lg,
-                    runSpacing: Space.sm,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            weightText(context, latest.grams, unit),
-                            style: context.type.headlineSmall,
-                          ),
-                          Text(
-                            'Latest · ${fullDay(latest.day)}',
-                            style: context.type.bodySmall,
-                          ),
-                        ],
-                      ),
-                      FilledButton.icon(
-                        onPressed: () => context.push('/profile/weigh-in'),
-                        icon: const Icon(LucideIcons.plus, size: 18),
-                        label: const Text('Log weight'),
-                      ),
-                    ],
+                  Text(
+                    weightText(context, latest.grams, unit!),
+                    style: context.type.headlineSmall,
+                  ),
+                  Text(
+                    'Latest · ${fullDay(latest.day)}',
+                    style: context.type.bodySmall,
                   ),
                   const SizedBox(height: Space.xl),
                   _WeightTrend(latest: latest.day, unit: unit),
@@ -86,11 +108,19 @@ class _WeightHistoryPageState extends ConsumerState<WeightHistoryPage> {
                       onTap: () =>
                           context.push('/profile/weigh-in', extra: record),
                     ),
-                  if (records.length > _limit)
+                  if (!latestRows.hasValue && latestRows.hasError)
                     QuietButton(
-                      'Load more',
-                      () => setState(() => _limit += _pageSize),
-                    ),
+                      'Retry loading more',
+                      () => ref.invalidate(rows),
+                    )
+                  else if (!latestRows.hasValue)
+                    const QuietButton(
+                      'Loading more…',
+                      null,
+                      icon: LucideIcons.hourglass,
+                    )
+                  else if (records.length > _limit)
+                    QuietButton('Load more', () => _loadMore(records)),
                 ],
               );
             },
@@ -112,6 +142,18 @@ class _WeightTrend extends ConsumerWidget {
     final filter = (limit: null, since: latest.plusDays(-89));
     return AsyncPanel(
       ref.watch(weighInsProvider(filter)),
+      loadingLabel: 'Loading weight trend',
+      loading: const Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Skeleton(width: 110, height: 20),
+          ),
+          SizedBox(height: Space.md),
+          Skeleton(height: 186),
+        ],
+      ),
       retry: () => ref.invalidate(weighInsProvider(filter)),
       builder: (records) {
         if (records.isEmpty) return const SizedBox.shrink();
@@ -375,6 +417,8 @@ class WeightFormPage extends ConsumerWidget {
       children: [
         AsyncPanel(
           result,
+          loadingLabel: 'Loading weight units',
+          loading: const SkeletonRows(count: 2, rowHeight: 56),
           retry: () => ref.invalidate(profileProvider),
           builder: (_) => const SizedBox.shrink(),
         ),
